@@ -126,14 +126,16 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
         // Python feature extraction logic exactly (including the same heuristics)
         return """
             javascript:(function() {
-                try {
-                    function normalizeUrl(raw) {
-                        try {
-                            return new URL(raw, window.location.href);
-                        } catch (e) {
-                            return null;
+                // 페이지 완전 로드 대기 (동적 로딩 요소 포함)
+                var executeExtraction = function() {
+                    try {
+                        function normalizeUrl(raw) {
+                            try {
+                                return new URL(raw, window.location.href);
+                            } catch (e) {
+                                return null;
+                            }
                         }
-                    }
 
                     var url = window.location.href;
                     // 끝의 슬래시 제거 (정규화)
@@ -251,21 +253,53 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
 
                     features.path_extension = window.location.pathname.endsWith('.txt') ? 1 : 0;
 
-                    var redirectChainLength = 0;
-                    try {
-                        if (window.performance && window.performance.getEntriesByType) {
-                            var navEntries = window.performance.getEntriesByType('navigation');
-                            if (navEntries && navEntries.length > 0 && typeof navEntries[0].redirectCount === 'number') {
-                                redirectChainLength = navEntries[0].redirectCount;
-                            } else if (window.performance.navigation && typeof window.performance.navigation.redirectCount === 'number') {
-                                redirectChainLength = window.performance.navigation.redirectCount;
-                            }
+                    // 정적 분석: 현재 페이지 내 모든 링크에서 리다이렉트 여부 검사
+                    // Python과 동일: requests.get(link)에서 r.history 확인과 유사
+                    var internalRedirectCount = 0;
+                    var externalRedirectCount = 0;
+                    var currentHost = window.location.hostname.toLowerCase();
+                    
+                    // 페이지 내 모든 링크 수집
+                    var allLinks = [];
+                    var anchors = document.getElementsByTagName('a');
+                    for (var ai = 0; ai < anchors.length; ai++) {
+                        var href = anchors[ai].getAttribute('href');
+                        if (href && (href.startsWith('http') || href.startsWith('/'))) {
+                            allLinks.push(href);
                         }
-                    } catch (redirectErr) {
-                        redirectChainLength = 0;
                     }
-                    features.nb_redirection = redirectChainLength;
-                    features.nb_external_redirection = 0;
+                    
+                    // 각 링크의 리다이렉트 여부 판단 (간단한 휴리스틱)
+                    // 실제 HTTP 요청 없이, 링크의 특성으로 예상
+                    for (var li = 0; li < allLinks.length; li++) {
+                        var link = allLinks[li];
+                        try {
+                            var linkUrl = new URL(link, window.location.href);
+                            var linkHost = linkUrl.hostname.toLowerCase();
+                            
+                            // URL 단축 서비스는 거의 항상 리다이렉트
+                            if (link.match(/^https?:\/\/(bit\.ly|tinyurl\.com|goo\.gl|ow\.ly|short\.|v\.gd)/i)) {
+                                if (linkHost !== currentHost) {
+                                    externalRedirectCount++;
+                                } else {
+                                    internalRedirectCount++;
+                                }
+                            }
+                            // URL 쿼리 파라미터에 리다이렉트 URL이 있으면 리다이렉트 가능성
+                            else if (link.match(/[?&](url=|redirect=|return=|goto=|go=)/i)) {
+                                if (linkHost !== currentHost) {
+                                    externalRedirectCount++;
+                                } else {
+                                    internalRedirectCount++;
+                                }
+                            }
+                        } catch (e) {
+                            // 잘못된 URL은 무시
+                        }
+                    }
+                    
+                    features.nb_redirection = internalRedirectCount + externalRedirectCount;
+                    features.nb_external_redirection = externalRedirectCount;
                     features.length_words_raw = urlWords.length;
 
                     function countCharRepeat(words) {
@@ -368,8 +402,12 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     var forms = document.getElementsByTagName('form');
                     var hasExternalOrNullForm = false;
                     var hasPhpForm = false;
+                    var hasLoginFields = false;
+                    
                     for (var i = 0; i < forms.length; i++) {
                         var action = (forms[i].getAttribute('action') || '').trim();
+                        
+                        // 1. Form action 분석
                         if (!action || action === '' || action === '#' || action === 'about:blank' || action.toLowerCase().startsWith('javascript:')) {
                             hasExternalOrNullForm = true;
                         } else if (action.indexOf('http') === 0) {
@@ -378,11 +416,28 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                                 hasExternalOrNullForm = true;
                             }
                         }
-                        if (/([a-zA-Z0-9_])+\.php/.test(action)) {
+                        
+                        if (/([a-zA-Z0-9_])+.php/.test(action)) {
                             hasPhpForm = true;
                         }
+                        
+                        // 2. 폼 내 입력 필드 분석 (password 필드 존재 = 로그인 폼)
+                        var inputs = forms[i].getElementsByTagName('input');
+                        var hasPasswordField = false;
+                        for (var j = 0; j < inputs.length; j++) {
+                            var inputType = (inputs[j].getAttribute('type') || 'text').toLowerCase();
+                            if (inputType === 'password') {
+                                hasPasswordField = true;
+                                break;
+                            }
+                        }
+                        if (hasPasswordField) {
+                            hasLoginFields = true;
+                        }
                     }
-                    features.login_form = (hasExternalOrNullForm || hasPhpForm) ? 1 : 0;
+                    
+                    // 로그인 폼: external/null form OR php form OR password 필드가 있는 폼
+                    features.login_form = (hasExternalOrNullForm || hasPhpForm || hasLoginFields) ? 1 : 0;
 
                     // submit_email: Check if any form submits to email
                     var hasEmailSubmit = false;
@@ -487,9 +542,21 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     }
 
                     Android.receiveFeatures(JSON.stringify(features));
-                } catch (e) {
-                    console.error('Feature extraction error:', e);
-                    Android.receiveFeatures(JSON.stringify({ error: e.message }));
+                    } catch (e) {
+                        console.error('Feature extraction error:', e);
+                        Android.receiveFeatures(JSON.stringify({ error: e.message }));
+                    }
+                };
+                
+                // 페이지 완전 로드 대기
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        // AJAX 동적 로딩 완료 대기 (1000ms)
+                        setTimeout(executeExtraction, 1000);
+                    });
+                } else if (document.readyState === 'interactive' || document.readyState === 'complete') {
+                    // 이미 로드됨 - AJAX 로딩 완료 대기 (1000ms)
+                    setTimeout(executeExtraction, 1000);
                 }
             })();
         """.trimIndent()

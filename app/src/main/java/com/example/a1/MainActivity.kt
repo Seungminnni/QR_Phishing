@@ -455,6 +455,7 @@ class MainActivity : AppCompatActivity() {
     private fun extractWebFeatures() {
         Log.d(TAG, "extractWebFeatures() 호출됨 - URL: $currentUrl")
         isAnalyzingFeatures = true
+        
         // Use the already-registered webFeatureExtractor instance's script
         // The JS will call Android.receiveFeatures() which routes to our stored instance
         val script = webFeatureExtractor.getFeatureExtractionScript()
@@ -467,42 +468,23 @@ class MainActivity : AppCompatActivity() {
     private fun analyzeAndDisplayPhishingResult(features: WebFeatures) {
         Log.d(TAG, "analyzeAndDisplayPhishingResult() 호출됨, 피처 수: ${features.size}")
         val urlForAnalysis = currentUrl
-        val redirectsSnapshot = dynamicTotalRedirects
-        val externalRedirectsSnapshot = dynamicExternalRedirects
-        val errorsSnapshot = dynamicTotalErrors
-        val externalErrorsSnapshot = dynamicExternalErrors
 
         analysisExecutor.execute {
             try {
                 val merged = features.toMutableMap()
-                try {
-                    merged["nb_redirection"] = redirectsSnapshot.toFloat()
-                    merged["nb_external_redirection"] = externalRedirectsSnapshot.toFloat()
-                    if (redirectsSnapshot == 0) {
-                        merged["ratio_intRedirection"] = 0f
-                        merged["ratio_extRedirection"] = 0f
-                    } else {
-                        val internal = (redirectsSnapshot - externalRedirectsSnapshot)
-                        merged["ratio_intRedirection"] = internal.toFloat() / redirectsSnapshot.toFloat()
-                        merged["ratio_extRedirection"] = externalRedirectsSnapshot.toFloat() / redirectsSnapshot.toFloat()
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Failed to merge dynamic redirect counters", e)
-                }
-
-                try {
-                    merged["nb_errors"] = errorsSnapshot.toFloat()
-                    merged["nb_external_errors"] = externalErrorsSnapshot.toFloat()
-                    if (errorsSnapshot == 0) {
-                        merged["ratio_intErrors"] = 0f
-                        merged["ratio_extErrors"] = 0f
-                    } else {
-                        val internalErrors = (errorsSnapshot - externalErrorsSnapshot)
-                        merged["ratio_intErrors"] = internalErrors.toFloat() / errorsSnapshot.toFloat()
-                        merged["ratio_extErrors"] = externalErrorsSnapshot.toFloat() / errorsSnapshot.toFloat()
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Failed to merge dynamic error counters", e)
+                
+                // JavaScript의 정적 분석 결과 사용 (동적 카운팅 제거)
+                // nb_redirection과 nb_external_redirection은 이미 JavaScript에서 계산됨
+                if ((merged["nb_redirection"] ?: 0f) > 0f) {
+                    val totalRedirects = (merged["nb_redirection"] ?: 0f).toInt()
+                    val externalRedirects = (merged["nb_external_redirection"] ?: 0f).toInt()
+                    val internalRedirects = totalRedirects - externalRedirects
+                    
+                    merged["ratio_intRedirection"] = if (totalRedirects > 0) internalRedirects.toFloat() / totalRedirects else 0f
+                    merged["ratio_extRedirection"] = if (totalRedirects > 0) externalRedirects.toFloat() / totalRedirects else 0f
+                } else {
+                    merged["ratio_intRedirection"] = 0f
+                    merged["ratio_extRedirection"] = 0f
                 }
 
                 val statValue = computeStatisticalReport(urlForAnalysis)
@@ -510,7 +492,7 @@ class MainActivity : AppCompatActivity() {
                     merged["statistical_report"] = statValue
                 }
 
-                Log.d(TAG, "dynamic redirects total=$redirectsSnapshot external=$externalRedirectsSnapshot | errors total=$errorsSnapshot external=$externalErrorsSnapshot")
+                Log.d(TAG, "static features - nb_redirection=${merged["nb_redirection"]}, nb_external_redirection=${merged["nb_external_redirection"]}")
 
                 val analysisResult = phishingDetector.analyzePhishing(merged, urlForAnalysis)
                 runOnUiThread {
@@ -662,7 +644,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.neutralsources.com/-/re.html"
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.naver.com/"
         private val STATISTICAL_REPORT_DOMAINS = setOf(
             "trusted-reporting.edgekey.net",
             "fundingchoicesmessages.google.com"
