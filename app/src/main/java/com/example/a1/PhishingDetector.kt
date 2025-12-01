@@ -4,50 +4,85 @@ import android.content.Context
 import android.util.Log
 
 /**
- * PhishingDetector orchestrates the ML predictor and a small set of deterministic
- * heuristics used as fallbacks/interpretability signals. We intentionally avoid a
- * large hard-coded PHISHING_RULES map in MainActivity and instead keep a compact,
- * maintainable implementation here.
+ * PhishingDetector uses Keras 모델 (via Chaquopy) with RobustScaler preprocessing
+ * and fallback to heuristics if model inference fails.
  */
 class PhishingDetector(private val context: Context) {
 
-    private val predictor = TFLitePhishingPredictor(context)
+    private val kerasPredictor: KerasPhishingPredictor?
+    private val scalerPreprocessor: ScalerPreprocessor?
 
     companion object {
         private const val TAG = "PhishingDetector"
         private const val ML_THRESHOLD = 0.55f
     }
 
+    init {
+        // Keras 모델 초기화
+        kerasPredictor = try {
+            KerasPhishingPredictor(context).also {
+                if (it.isModelReady()) {
+                    Log.d(TAG, "✅ Keras 모델 초기화 성공")
+                } else {
+                    Log.w(TAG, "⚠️ Keras 모델 로드 실패")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ Keras 모델 초기화 예외 발생", e)
+            null
+        }
+
+        // RobustScaler 전처리 초기화
+        scalerPreprocessor = try {
+            ScalerPreprocessor(context).also {
+                Log.d(TAG, "✅ ScalerPreprocessor 초기화 성공")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ ScalerPreprocessor 초기화 실패", e)
+            null
+        }
+    }
+
     fun analyzePhishing(features: WebFeatures, currentUrl: String?): PhishingAnalysisResult {
         Log.d(TAG, "analyzePhishing() 호출됨 - 피처 수: ${features.size}, URL: $currentUrl")
         val riskReasons = mutableListOf<String>()
 
-        // Basic heuristics for explainability (keeps MainActivity clean from rules map)
+        // Basic heuristics for explainability
         runCatching {
             if (features["shortening_service"] == 1.0f) riskReasons.add("단축 URL 서비스 감지")
             if (features["login_form"] == 1.0f) riskReasons.add("로그인/외부 폼 감지")
             if ((features["nb_redirection"] ?: 0f) >= 3f) riskReasons.add("다수의 리다이렉션 감지")
             if (features["suspecious_tld"] == 1.0f) riskReasons.add("의심스러운 최상위 도메인")
-            // brand indicators
             if (features["domain_in_brand"] == 1.0f) riskReasons.add("브랜드명 포함 도메인")
             if (features["brand_in_path"] == 1.0f) riskReasons.add("브랜드명 포함 경로")
         }
 
-        // Ask ML model for a prediction
-        Log.d(TAG, "ML 모델 예측 호출 시작")
-        val mlScoreFloat = runCatching { predictor.predictWithML(features) }.getOrElse {
-            Log.w(TAG, "ML prediction failed, falling back to heuristics", it)
-            -1.0f
+        // Keras 모델로 예측
+        var mlScoreFloat = -1.0f
+        
+        if (kerasPredictor?.isModelReady() == true && scalerPreprocessor != null) {
+            Log.d(TAG, "🤖 Keras 모델로 예측 시작")
+            try {
+                val preprocessedFeatures = scalerPreprocessor.preprocessFeatures(features)
+                scalerPreprocessor.logPreprocessedFeatures(preprocessedFeatures)
+                mlScoreFloat = kerasPredictor.predictWithKeras(preprocessedFeatures)
+                if (mlScoreFloat >= 0) {
+                    Log.d(TAG, "✅ Keras 예측 성공: $mlScoreFloat")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Keras 예측 실패", e)
+            }
+        } else {
+            Log.w(TAG, "⚠️ Keras 모델이 준비되지 않음")
         }
-        Log.d(TAG, "ML 모델 예측 완료: $mlScoreFloat")
 
         val (confidenceScore, isPhishing) = if (mlScoreFloat >= 0f) {
-            // Ensure normalized value 0..1
             val score = mlScoreFloat.coerceIn(0f, 1f).toDouble()
             Pair(score, score >= ML_THRESHOLD)
         } else {
-            // ML not available — use heuristics in a conservative way
+            // ML 실패 시 휴리스틱
             val heuristicsScore = if (riskReasons.isNotEmpty()) 0.6 else 0.0
+            Log.w(TAG, "⚠️ ML 모델 예측 불가, 휴리스틱 사용: $heuristicsScore")
             Pair(heuristicsScore, heuristicsScore >= ML_THRESHOLD)
         }
 
@@ -60,7 +95,11 @@ class PhishingDetector(private val context: Context) {
         )
     }
 
-    fun isModelReady(): Boolean = predictor.isModelReady()
+    fun isModelReady(): Boolean {
+        return kerasPredictor?.isModelReady() == true
+    }
 
-    fun close() { predictor.close() }
+    fun close() {
+        kerasPredictor?.close()
+    }
 }
