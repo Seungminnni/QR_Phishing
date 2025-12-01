@@ -4,12 +4,12 @@ import android.content.Context
 import android.util.Log
 
 /**
- * PhishingDetector uses Keras 모델 (via Chaquopy) with RobustScaler preprocessing
+ * PhishingDetector uses TFLite 모델 with RobustScaler preprocessing
  * and fallback to heuristics if model inference fails.
  */
 class PhishingDetector(private val context: Context) {
 
-    private val kerasPredictor: KerasPhishingPredictor?
+    private val tflitePredictor: TFLitePhishingPredictor?
     private val scalerPreprocessor: ScalerPreprocessor?
 
     companion object {
@@ -18,17 +18,17 @@ class PhishingDetector(private val context: Context) {
     }
 
     init {
-        // Keras 모델 초기화
-        kerasPredictor = try {
-            KerasPhishingPredictor(context).also {
+        // TFLite 모델 초기화
+        tflitePredictor = try {
+            TFLitePhishingPredictor(context).also {
                 if (it.isModelReady()) {
-                    Log.d(TAG, "✅ Keras 모델 초기화 성공")
+                    Log.d(TAG, "✅ TFLite 모델 초기화 성공")
                 } else {
-                    Log.w(TAG, "⚠️ Keras 모델 로드 실패")
+                    Log.w(TAG, "⚠️ TFLite 모델 로드 실패")
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "⚠️ Keras 모델 초기화 예외 발생", e)
+            Log.w(TAG, "⚠️ TFLite 모델 초기화 예외 발생", e)
             null
         }
 
@@ -57,23 +57,23 @@ class PhishingDetector(private val context: Context) {
             if (features["brand_in_path"] == 1.0f) riskReasons.add("브랜드명 포함 경로")
         }
 
-        // Keras 모델로 예측
+        // TFLite 모델로 예측
         var mlScoreFloat = -1.0f
         
-        if (kerasPredictor?.isModelReady() == true && scalerPreprocessor != null) {
-            Log.d(TAG, "🤖 Keras 모델로 예측 시작")
+        if (tflitePredictor?.isModelReady() == true && scalerPreprocessor != null) {
+            Log.d(TAG, "🤖 TFLite 모델로 예측 시작")
             try {
                 val preprocessedFeatures = scalerPreprocessor.preprocessFeatures(features)
                 scalerPreprocessor.logPreprocessedFeatures(preprocessedFeatures)
-                mlScoreFloat = kerasPredictor.predictWithKeras(preprocessedFeatures)
+                mlScoreFloat = tflitePredictor.predictWithTFLite(preprocessedFeatures)
                 if (mlScoreFloat >= 0) {
-                    Log.d(TAG, "✅ Keras 예측 성공: $mlScoreFloat")
+                    Log.d(TAG, "✅ TFLite 예측 성공: $mlScoreFloat")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Keras 예측 실패", e)
+                Log.e(TAG, "❌ TFLite 예측 실패", e)
             }
         } else {
-            Log.w(TAG, "⚠️ Keras 모델이 준비되지 않음")
+            Log.w(TAG, "⚠️ TFLite 모델이 준비되지 않음")
         }
 
         val (confidenceScore, isPhishing) = if (mlScoreFloat >= 0f) {
@@ -96,10 +96,10 @@ class PhishingDetector(private val context: Context) {
     }
 
     fun isModelReady(): Boolean {
-        return kerasPredictor?.isModelReady() == true
+        return tflitePredictor?.isModelReady() == true
     }
 
     fun close() {
-        kerasPredictor?.close()
+        tflitePredictor?.close()
     }
 }
