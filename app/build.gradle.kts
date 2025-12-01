@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    id("com.chaquo.python") version "16.0.0"
 }
 
 android {
@@ -36,13 +37,19 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    androidResources {
-        noCompress += "tflite"
+    python {
+        version = "3.11"
+        buildPython = "/usr/bin/python3"
+        pip {
+            install("keras==3.4.1")
+            install("numpy==1.24.3")
+            install("tensorflow==2.15.0")
+        }
     }
 }
 
 dependencies {
-
+    implementation("com.chaquo.python:python:16.0.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -53,8 +60,6 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
-    implementation("org.tensorflow:tensorflow-lite:2.17.0")
-    implementation("org.tensorflow:tensorflow-lite-support:0.5.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
