@@ -45,12 +45,79 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                 }
             }
 
+            // statistical_report 계산 (DNS 조회 필요)
+            val statisticalReport = calculateStatisticalReport(jsonObject)
+            features["statistical_report"] = statisticalReport.toFloat()
+
             val presentCount = features.count { it.value != null }
             val nullCount = features.count { it.value == null }
             Log.d("WebFeatureExtractor", "Parsed features: total=${features.size}, present=$presentCount, null=$nullCount")
             callback(features)
         } catch (e: Exception) {
             Log.e("WebFeatureExtractor", "Failed to parse feature JSON", e)
+        }
+    }
+
+    /**
+     * statistical_report 계산 (Python 로직 재현)
+     * Returns: 1 (의심), 0 (정상), 2 (예외/미결정)
+     */
+    private fun calculateStatisticalReport(jsonObject: JSONObject): Int {
+        try {
+            // Python: url_match 패턴
+            val suspiciousUrlPatterns = Regex(
+                "at\\.ua|usa\\.cc|baltazarpresentes\\.com\\.br|pe\\.hu|esy\\.es|hol\\.es|sweddy\\.com|" +
+                "myjino\\.ru|96\\.lt|ow\\.ly"
+            )
+
+            // Python: ip_match 패턴
+            val suspiciousIpPatterns = Regex(
+                "146\\.112\\.61\\.108|213\\.174\\.157\\.151|121\\.50\\.168\\.88|192\\.185\\.217\\.116|" +
+                "78\\.46\\.211\\.158|181\\.174\\.165\\.13|46\\.242\\.145\\.103|121\\.50\\.168\\.40|" +
+                "83\\.125\\.22\\.219|46\\.242\\.145\\.98|107\\.151\\.148\\.44|107\\.151\\.148\\.107|" +
+                "64\\.70\\.19\\.203|199\\.184\\.144\\.27|107\\.151\\.148\\.108|107\\.151\\.148\\.109|" +
+                "119\\.28\\.52\\.61|54\\.83\\.43\\.69|52\\.69\\.166\\.231|216\\.58\\.192\\.225|" +
+                "118\\.184\\.25\\.86|67\\.208\\.74\\.71|23\\.253\\.126\\.58|104\\.239\\.157\\.210|" +
+                "175\\.126\\.123\\.219|141\\.8\\.224\\.221|10\\.10\\.10\\.10|43\\.229\\.108\\.32|" +
+                "103\\.232\\.215\\.140|69\\.172\\.201\\.153|216\\.218\\.185\\.162|54\\.225\\.104\\.146|" +
+                "103\\.243\\.24\\.98|199\\.59\\.243\\.120|31\\.170\\.160\\.61|213\\.19\\.128\\.77|" +
+                "62\\.113\\.226\\.131|208\\.100\\.26\\.234|195\\.16\\.127\\.102|195\\.16\\.127\\.157|" +
+                "34\\.196\\.13\\.28|103\\.224\\.212\\.222|172\\.217\\.4\\.225|54\\.72\\.9\\.51|" +
+                "192\\.64\\.147\\.141|198\\.200\\.56\\.183|23\\.253\\.164\\.103|52\\.48\\.191\\.26|" +
+                "52\\.214\\.197\\.72|87\\.98\\.255\\.18|209\\.99\\.17\\.27|216\\.38\\.62\\.18|" +
+                "104\\.130\\.124\\.96|47\\.89\\.58\\.141|78\\.46\\.211\\.158|54\\.86\\.225\\.156|" +
+                "54\\.82\\.156\\.19|37\\.157\\.192\\.102|204\\.11\\.56\\.48|110\\.34\\.231\\.42"
+            )
+
+            val url = jsonObject.optString("length_url", "")
+            
+            // URL 패턴 매칭
+            if (suspiciousUrlPatterns.containsMatchIn(url)) {
+                Log.d("WebFeatureExtractor", "statistical_report: suspicious URL pattern matched")
+                return 1
+            }
+
+            // IP 주소 조회 및 패턴 매칭
+            try {
+                val hostname = jsonObject.optString("length_hostname", "")
+                if (hostname.isNotEmpty()) {
+                    val ipAddress = java.net.InetAddress.getByName(hostname).hostAddress
+                    Log.d("WebFeatureExtractor", "Resolved IP: $ipAddress")
+                    
+                    if (suspiciousIpPatterns.containsMatchIn(ipAddress)) {
+                        Log.d("WebFeatureExtractor", "statistical_report: suspicious IP pattern matched")
+                        return 1
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d("WebFeatureExtractor", "statistical_report: DNS lookup failed or exception")
+                return 2  // Python: except: return 2
+            }
+
+            return 0  // 정상
+        } catch (e: Exception) {
+            Log.e("WebFeatureExtractor", "Error calculating statistical_report", e)
+            return 2
         }
     }
 
@@ -69,6 +136,10 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     }
 
                     var url = window.location.href;
+                    // 끝의 슬래시 제거 (정규화)
+                    if (url.endsWith('/') && url.lastIndexOf('/') > 8) {  // protocol:// 다음의 /는 유지
+                        url = url.slice(0, -1);
+                    }
                     var hostname = window.location.hostname;
                     var hostLower = hostname.toLowerCase();
                     var pathLower = window.location.pathname.toLowerCase();
@@ -273,8 +344,8 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
 
                     var suspiciousTlds = ['fit','tk','gp','ga','work','ml','date','wang','men','icu','online','click','xyz','top','zip','country','stream','download','xin','racing','jetzt','ren','mom','party','review','trade','accountants','science','ninja','faith','cricket','win','accountant','realtor','christmas','gdn','link','asia','club','la','ae','exposed','pe','rs','audio','website','bj','mx','media'];
                     features.suspecious_tld = suspiciousTlds.includes(tld) ? 1 : 0;
-                    // statistical_report is resolved natively (DNS/IP lookup) on Android side
-                    features.statistical_report = null;
+                    // Note: statistical_report will be calculated in Kotlin after DNS lookup
+                    // (not included in JavaScript - handled natively on Android side)
 
                     var cssLinks = document.querySelectorAll('link[rel="stylesheet"]');
                     var extCSSCount = 0;
@@ -389,10 +460,12 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
 
                     // empty_title
                     features.empty_title = (!document.title || document.title.trim() === '') ? 1 : 0;
+                    console.log('DEBUG: document.title = "' + document.title + '", empty_title = ' + features.empty_title);
 
-                    // domain_in_title: 0 if domain is in title, 1 otherwise
+                    // domain_in_title: 1 if domain is in title, 0 otherwise
                     var titleLower = (document.title || '').toLowerCase();
-                    features.domain_in_title = (titleLower.indexOf(domainLabel) !== -1) ? 0 : 1;
+                    features.domain_in_title = (titleLower.indexOf(domainLabel) !== -1) ? 1 : 0;
+                    console.log('DEBUG: domainLabel = "' + domainLabel + '", titleLower = "' + titleLower + '", domain_in_title = ' + features.domain_in_title);
 
                     // domain_with_copyright: Check if domain appears near copyright symbol
                     // Python: finds ©/™/® then checks if domain in surrounding 50 chars
