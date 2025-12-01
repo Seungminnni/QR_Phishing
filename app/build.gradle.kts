@@ -40,6 +40,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     // TFLite (핵심 의존성)
     implementation("org.tensorflow:tensorflow-lite:2.17.0")
     implementation("org.tensorflow:tensorflow-lite-support:0.5.0")

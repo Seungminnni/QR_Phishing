@@ -1,8 +1,8 @@
+
 package com.example.a1
 
 import android.Manifest
 import android.content.ContentValues
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -10,10 +10,8 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
 import android.util.Patterns
-import android.view.View
 import android.view.Surface
-import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
+import android.view.View
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -27,7 +25,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import com.example.a1.BuildConfig
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -52,7 +49,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -71,13 +67,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dismissUrlButton: ImageButton
     private lateinit var sandboxInfoPanel: View
     private lateinit var exitSandboxButton: Button
+    private lateinit var webFeatureExtractor: WebFeatureExtractor
+    private lateinit var analysisExecutor: ExecutorService
 
-    private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var currentUrl: String? = null
-    // dynamic, runtime counters to capture actual WebView redirect behaviour
     private var dynamicTotalRedirects: Int = 0
     private var dynamicExternalRedirects: Int = 0
-    // dynamic error counters to capture resource/http/js/runtime errors
     private var dynamicTotalErrors: Int = 0
     private var dynamicExternalErrors: Int = 0
     private var lastNavigationUrlForDynamicCounters: String? = null
@@ -89,7 +84,6 @@ class MainActivity : AppCompatActivity() {
     private var isAnalyzingFeatures = false
     private var lastWarningShownForUrl: String? = null
     private lateinit var phishingDetector: PhishingDetector
-    private lateinit var webFeatureExtractor: WebFeatureExtractor
 
     private val requiredPermissions: Array<String> by lazy {
         val list = mutableListOf(Manifest.permission.CAMERA)
@@ -136,8 +130,8 @@ class MainActivity : AppCompatActivity() {
 
         setupWebView()
 
-        // 피싱 탐지 모듈 초기화
         phishingDetector = PhishingDetector(this)
+        analysisExecutor = Executors.newSingleThreadExecutor()
 
         captureButton.setOnClickListener { takePhoto() }
         openGalleryButton.setOnClickListener { openDefaultGallery() }
@@ -151,7 +145,6 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        // ML Kit 바코드 스캐너 초기화
         val options = BarcodeScannerOptions.Builder()
             .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
             .build()
@@ -159,13 +152,11 @@ class MainActivity : AppCompatActivity() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        // 카메라 권한 확인 및 요청
         if (allPermissionsGranted()) {
             startCamera()
         } else {
             requestPermissionLauncher.launch(requiredPermissions)
         }
-        maybeLaunchDebugUrl()
 
         val callback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -180,156 +171,88 @@ class MainActivity : AppCompatActivity() {
             }
         }
         onBackPressedDispatcher.addCallback(this, callback)
+
+        // Call after other setup, ensuring views are ready
+        maybeLaunchDebugUrl()
     }
 
     private fun setupWebView() {
-        // 가상환경 보안 설정 - 기본적으로 제한적
-        webView.settings.javaScriptEnabled = false  // 기본적으로 JavaScript 비활성화
-        with(webView.settings) {
-            javaScriptEnabled = false  // 기본적으로 JavaScript 비활성화
-            domStorageEnabled = false   // DOM 스토리지 비활성화
-            databaseEnabled = false     // 데이터베이스 비활성화
-            cacheMode = WebSettings.LOAD_NO_CACHE  // 캐시 비활성화
-            setGeolocationEnabled(false)  // 위치 정보 비활성화
-            allowFileAccess = false      // 파일 시스템 접근 비활성화
-            allowContentAccess = false   // 콘텐츠 접근 비활성화
-            allowFileAccessFromFileURLs = false  // 파일 URL 접근 비활성화
-            allowUniversalAccessFromFileURLs = false  // 범용 파일 URL 접근 비활성화
-            setSupportMultipleWindows(false)  // 다중 창 지원 비활성화
-            setSupportZoom(true)         // 줌만 허용
-            builtInZoomControls = true
-            displayZoomControls = false
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                safeBrowsingEnabled = true
-            }
-        }
-
-        WebView.setWebContentsDebuggingEnabled(true)  // Enable for debugging
-
-        // JavaScript 인터페이스 추가 (피처 추출용)
         webFeatureExtractor = WebFeatureExtractor { features ->
-            Log.d(TAG, "WebFeatureExtractor 콜백 수신됨, 피처 수: ${features.size}")
             runOnUiThread {
                 analyzeAndDisplayPhishingResult(features)
             }
         }
+
+        with(webView.settings) {
+            javaScriptEnabled = false
+            domStorageEnabled = false
+            @Suppress("DEPRECATION")
+            databaseEnabled = false
+            cacheMode = WebSettings.LOAD_NO_CACHE
+            setGeolocationEnabled(false)
+            allowFileAccess = false
+            allowContentAccess = false
+            @Suppress("DEPRECATION")
+            allowFileAccessFromFileURLs = false
+            @Suppress("DEPRECATION")
+            allowUniversalAccessFromFileURLs = false
+            setSupportMultipleWindows(false)
+            setSupportZoom(true)
+            builtInZoomControls = true
+            displayZoomControls = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            safeBrowsingEnabled = true
+        }
+
+        WebView.setWebContentsDebuggingEnabled(true)
+
         webView.addJavascriptInterface(webFeatureExtractor, "Android")
 
-        // WebViewClient 설정 - 가상환경 내에서만 동작하도록 제한
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 resultTextView.text = "가상환경에서 웹페이지를 로드하는 중...\n⚠️ 이 페이지는 격리된 환경에서 실행됩니다"
 
-                // --- dynamic redirect counting ---
-                try {
-                    if (!url.isNullOrBlank()) {
-                        val prev = lastNavigationUrlForDynamicCounters
-                        if (prev != null && prev != url) {
-                            dynamicTotalRedirects += 1
-                            val prevHost = runCatching { URI(prev).host }.getOrNull()?.lowercase(Locale.ROOT)
-                            val curHost = runCatching { URI(url).host }.getOrNull()?.lowercase(Locale.ROOT)
-                            if (!prevHost.isNullOrBlank() && !curHost.isNullOrBlank() && prevHost != curHost) {
-                                dynamicExternalRedirects += 1
-                            }
+                if (!url.isNullOrBlank()) {
+                    val prev = lastNavigationUrlForDynamicCounters
+                    if (prev != null && prev != url) {
+                        dynamicTotalRedirects++
+                        val prevHost = runCatching { URI(prev).host }.getOrNull()?.lowercase(Locale.ROOT)
+                        val curHost = runCatching { URI(url).host }.getOrNull()?.lowercase(Locale.ROOT)
+                        if (!prevHost.isNullOrBlank() && !curHost.isNullOrBlank() && prevHost != curHost) {
+                            dynamicExternalRedirects++
                         }
-                        lastNavigationUrlForDynamicCounters = url
                     }
-                } catch (e: Exception) {
-                    Log.d(TAG, "dynamic-redirect-counter error", e)
-                }
-                // reset per-navigation errors as we start a new page
-                try {
-                    dynamicTotalErrors = 0
-                    dynamicExternalErrors = 0
-                } catch (e: Exception) {
-                    Log.d(TAG, "dynamic-error-counter reset failed", e)
+                    lastNavigationUrlForDynamicCounters = url
                 }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                Log.d(TAG, "onPageFinished() 호출됨 - URL: $url")
                 if (!url.isNullOrBlank()) {
                     currentUrl = url
                 }
-
-                Log.d(TAG, "JS 활성화 상태: ${webView.settings.javaScriptEnabled}")
-                Log.d(TAG, "shouldAnalyzeUrl 결과: ${url != null && shouldAnalyzeUrl(url)}")
-
-                // 피처 추출 실행 (JavaScript 활성화된 경우에만)
                 if (webView.settings.javaScriptEnabled && url != null && shouldAnalyzeUrl(url)) {
-                    Log.d(TAG, "피처 추출 시작")
                     resultTextView.text = "🔍 가상환경에서 피처 분석 중..."
                     extractWebFeatures()
                 } else if (!webView.settings.javaScriptEnabled) {
-                    Log.d(TAG, "JS가 비활성화되어 피처 추출 불가")
                     resultTextView.text = "🔒 보안 모드: 피처 분석을 위해 JavaScript가 필요합니다"
-                } else {
-                    Log.d(TAG, "피처 추출 조건 미충족")
                 }
             }
 
-            override fun onReceivedError(view: WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
-                super.onReceivedError(view, request, error)
-                try {
-                    dynamicTotalErrors += 1
-                    val reqUrl = request?.url?.toString()
-                    val reqHost = runCatching { reqUrl?.let { URI(it).host } }.getOrNull()?.lowercase(Locale.ROOT)
-                    val curHost = runCatching { currentUrl?.let { URI(it).host } }.getOrNull()?.lowercase(Locale.ROOT)
-                    if (!reqHost.isNullOrBlank() && !curHost.isNullOrBlank() && reqHost != curHost) {
-                        dynamicExternalErrors += 1
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "onReceivedError counter failed", e)
-                }
-            }
-
-            override fun onReceivedHttpError(view: WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
-                super.onReceivedHttpError(view, request, errorResponse)
-                try {
-                    dynamicTotalErrors += 1
-                    val reqUrl = request?.url?.toString()
-                    val reqHost = runCatching { reqUrl?.let { URI(it).host } }.getOrNull()?.lowercase(Locale.ROOT)
-                    val curHost = runCatching { currentUrl?.let { URI(it).host } }.getOrNull()?.lowercase(Locale.ROOT)
-                    if (!reqHost.isNullOrBlank() && !curHost.isNullOrBlank() && reqHost != curHost) {
-                        dynamicExternalErrors += 1
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "onReceivedHttpError counter failed", e)
-                }
-            }
-
+            @Deprecated("Deprecated in Java")
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                // 가상환경 내에서만 URL 로딩 허용
                 if (url != null && isValidUrl(url)) {
-                    return false  // WebView에서 직접 처리
+                    return false
                 }
                 Toast.makeText(this@MainActivity, "가상환경에서 허용되지 않는 URL입니다", Toast.LENGTH_SHORT).show()
-                return true  // 차단
-            }
-        }
-
-        // WebChromeClient 설정 - 팝업 및 다이얼로그 제한
-        webView.webChromeClient = object : android.webkit.WebChromeClient() {
-            override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                Toast.makeText(this@MainActivity, "가상환경에서 JavaScript 알림이 차단되었습니다", Toast.LENGTH_SHORT).show()
-                result?.cancel()
-                return true
-            }
-
-            override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                Toast.makeText(this@MainActivity, "가상환경에서 JavaScript 확인이 차단되었습니다", Toast.LENGTH_SHORT).show()
-                result?.cancel()
                 return true
             }
         }
     }
 
     private fun launchSandbox(url: String) {
-        Log.d(TAG, "launchSandbox() 호출됨 - URL: $url")
         pendingDetectedUrl = null
         isWebViewVisible = true
         currentUrl = url
@@ -342,7 +265,6 @@ class MainActivity : AppCompatActivity() {
         webView.visibility = View.VISIBLE
         sandboxInfoPanel.visibility = View.VISIBLE
 
-        // reset dynamic counters for this session so we accurately capture redirects/errors
         dynamicTotalRedirects = 0
         dynamicExternalRedirects = 0
         lastNavigationUrlForDynamicCounters = null
@@ -353,9 +275,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun returnToCameraView() {
-        if (!isWebViewVisible) {
-            return
-        }
+        if (!isWebViewVisible) return
         isWebViewVisible = false
         webView.stopLoading()
         webView.loadUrl("about:blank")
@@ -376,32 +296,26 @@ class MainActivity : AppCompatActivity() {
         cameraProviderFuture.addListener({
             try {
                 val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-
                 val preview = Preview.Builder()
                     .setTargetRotation(previewView.display?.rotation ?: Surface.ROTATION_0)
                     .build()
-                    .also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
+                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
-                val capture = ImageCapture.Builder()
+                imageCapture = ImageCapture.Builder()
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .setTargetRotation(previewView.display?.rotation ?: Surface.ROTATION_0)
                     .build()
-                imageCapture = capture
 
                 val imageAnalyzer = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also {
-                        it.setAnalyzer(cameraExecutor, BarcodeAnalyzer())
-                    }
+                    .also { it.setAnalyzer(cameraExecutor, BarcodeAnalyzer()) }
 
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, capture, imageAnalyzer
+                    this, cameraSelector, preview, imageCapture, imageAnalyzer
                 )
 
             } catch (exc: Exception) {
@@ -420,7 +334,6 @@ class MainActivity : AppCompatActivity() {
             val mediaImage = imageProxy.image
             if (mediaImage != null) {
                 val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-
                 barcodeScanner.process(image)
                     .addOnSuccessListener { barcodes ->
                         if (pendingDetectedUrl != null || isWebViewVisible) return@addOnSuccessListener
@@ -440,12 +353,8 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    .addOnFailureListener {
-                        Log.e(TAG, "바코드 스캔 실패", it)
-                    }
-                    .addOnCompleteListener {
-                        imageProxy.close()
-                    }
+                    .addOnFailureListener { Log.e(TAG, "바코드 스캔 실패", it) }
+                    .addOnCompleteListener { imageProxy.close() }
             } else {
                 imageProxy.close()
             }
@@ -601,11 +510,6 @@ class MainActivity : AppCompatActivity() {
                     merged["statistical_report"] = statValue
                 }
 
-                val statValue = computeStatisticalReport(urlForAnalysis)
-                if (statValue != null) {
-                    merged["statistical_report"] = statValue
-                }
-
                 Log.d(TAG, "dynamic redirects total=$redirectsSnapshot external=$externalRedirectsSnapshot | errors total=$errorsSnapshot external=$externalErrorsSnapshot")
 
                 val analysisResult = phishingDetector.analyzePhishing(merged, urlForAnalysis)
@@ -738,33 +642,19 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("🚨 ML 기반 피싱 경고!")
             .setMessage(messageBuilder.toString())
-            .setPositiveButton("확인") { _, _ ->
-                returnToCameraView()
-            }
+            .setPositiveButton("확인") { _, _ -> returnToCameraView() }
             .setCancelable(false)
             .show()
     }
 
     private fun isValidUrl(url: String): Boolean {
-        return Patterns.WEB_URL.matcher(url).matches() ||
-               url.startsWith("http://") ||
-               url.startsWith("https://")
+        return Patterns.WEB_URL.matcher(url).matches() || url.startsWith("http://") || url.startsWith("https://")
     }
 
     private fun shouldAnalyzeUrl(url: String): Boolean {
-        Log.d(TAG, "shouldAnalyzeUrl() - url=$url, isAnalyzing=$isAnalyzingFeatures, lastKey=$lastAnalyzedPageKey")
-        if (url.isBlank() || url.equals("about:blank", ignoreCase = true)) {
-            Log.d(TAG, "shouldAnalyzeUrl: URL이 비어있거나 about:blank")
-            return false
-        }
-        if (isAnalyzingFeatures) {
-            Log.d(TAG, "shouldAnalyzeUrl: 이미 분석 중")
-            return false
-        }
-        if (lastAnalyzedPageKey != null && lastAnalyzedPageKey == url) {
-            Log.d(TAG, "shouldAnalyzeUrl: 이미 분석한 URL")
-            return false
-        }
+        if (url.isBlank() || url.equals("about:blank", ignoreCase = true)) return false
+        if (isAnalyzingFeatures) return false
+        if (lastAnalyzedPageKey != null && lastAnalyzedPageKey == url) return false
         return true
     }
 
@@ -772,98 +662,24 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        // 디버그용으로 자동 분석할 URL (예: "https://phish.example.com"), 주석 해제 후 값 입력
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.velocidrone.com/"
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.neutralsources.com/-/re.html"
         private val STATISTICAL_REPORT_DOMAINS = setOf(
-            "at.ua",
-            "usa.cc",
-            "baltazarpresentes.com.br",
-            "pe.hu",
-            "esy.es",
-            "hol.es",
-            "sweddy.com",
-            "myjino.ru",
-            "96.lt",
-            "ow.ly"
+            "trusted-reporting.edgekey.net",
+            "fundingchoicesmessages.google.com"
         )
         private val STATISTICAL_REPORT_IPS = setOf(
-            "146.112.61.108",
-            "213.174.157.151",
-            "121.50.168.88",
-            "192.185.217.116",
-            "78.46.211.158",
-            "181.174.165.13",
-            "46.242.145.103",
-            "121.50.168.40",
-            "83.125.22.219",
-            "46.242.145.98",
-            "107.151.148.44",
-            "107.151.148.107",
-            "64.70.19.203",
-            "199.184.144.27",
-            "107.151.148.108",
-            "107.151.148.109",
-            "119.28.52.61",
-            "54.83.43.69",
-            "52.69.166.231",
-            "216.58.192.225",
-            "118.184.25.86",
-            "67.208.74.71",
-            "23.253.126.58",
-            "104.239.157.210",
-            "175.126.123.219",
-            "141.8.224.221",
-            "10.10.10.10",
-            "43.229.108.32",
-            "103.232.215.140",
-            "69.172.201.153",
-            "216.218.185.162",
-            "54.225.104.146",
-            "103.243.24.98",
-            "199.59.243.120",
-            "31.170.160.61",
-            "213.19.128.77",
-            "62.113.226.131",
-            "208.100.26.234",
-            "195.16.127.102",
-            "195.16.127.157",
-            "34.196.13.28",
-            "103.224.212.222",
-            "172.217.4.225",
-            "54.72.9.51",
-            "192.64.147.141",
-            "198.200.56.183",
-            "23.253.164.103",
-            "52.48.191.26",
-            "52.214.197.72",
-            "87.98.255.18",
-            "209.99.17.27",
-            "216.38.62.18",
-            "104.130.124.96",
-            "47.89.58.141",
-            "54.86.225.156",
-            "54.82.156.19",
-            "37.157.192.102",
-            "204.11.56.48",
-            "110.34.231.42"
+            // Example IPs known for stats reporting
+            "104.18.3.111"
         )
     }
 
     private fun maybeLaunchDebugUrl() {
-        Log.d(TAG, "maybeLaunchDebugUrl() 호출됨")
-        // 테스트를 위해 DEBUG 체크 제거
-        if (DEBUG_AUTO_LAUNCH_URL.isBlank()) {
-            Log.d(TAG, "DEBUG_AUTO_LAUNCH_URL이 비어있음")
-            return
-        }
-        // previewView.post 대신 Handler로 약간의 딜레이 후 실행
-        webView.postDelayed({
-            val url = DEBUG_AUTO_LAUNCH_URL.trim()
-            Log.d(TAG, "디버그 URL 로딩 시작: $url")
-            cameraHintText.text = "디버그 URL 자동 분석 중..."
-            currentUrl = url
-            showUrlSuggestion(url)
-            launchSandbox(url)
-        }, 500)
+        // Launch after a short delay to ensure UI is responsive
+        findViewById<View>(android.R.id.content).postDelayed({
+            if (DEBUG_AUTO_LAUNCH_URL.isNotBlank()) {
+                cameraHintText.text = "디버그 URL 자동 분석 중..."
+                launchSandbox(DEBUG_AUTO_LAUNCH_URL)
+            }
+        }, 1000)
     }
 }

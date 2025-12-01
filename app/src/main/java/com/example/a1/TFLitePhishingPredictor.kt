@@ -76,10 +76,10 @@ class TFLitePhishingPredictor(private val context: Context) {
                 val outputTensor = it.getOutputTensor(0)
 
                 Log.d(TAG, "📊 모델 구조:")
-                Log.d(TAG, "  입력 Shape: ${inputTensor.shape.contentToString()}")
-                Log.d(TAG, "  입력 타입: ${inputTensor.dataType}")
-                Log.d(TAG, "  출력 Shape: ${outputTensor.shape.contentToString()}")
-                Log.d(TAG, "  출력 타입: ${outputTensor.dataType}")
+                Log.d(TAG, "  입력 Shape: ${inputTensor.shape().contentToString()}")
+                Log.d(TAG, "  입력 타입: ${inputTensor.dataType()}")
+                Log.d(TAG, "  출력 Shape: ${outputTensor.shape().contentToString()}")
+                Log.d(TAG, "  출력 타입: ${outputTensor.dataType()}")
             }
         } catch (e: Exception) {
             Log.w(TAG, "모델 정보 로깅 실패", e)
@@ -141,10 +141,5 @@ class TFLitePhishingPredictor(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "⚠️ TFLite 인터프리터 종료 실패", e)
         }
-    }
-
-    override fun finalize() {
-        super.finalize()
-        close()
     }
 }
