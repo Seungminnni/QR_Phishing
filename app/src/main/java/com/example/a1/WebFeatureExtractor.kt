@@ -400,44 +400,42 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     features.ratio_extErrors = 0;
 
                     var forms = document.getElementsByTagName('form');
-                    var hasExternalOrNullForm = false;
-                    var hasPhpForm = false;
-                    var hasLoginFields = false;
+                    var hasLoginForm = false;
                     
                     for (var i = 0; i < forms.length; i++) {
-                        var action = (forms[i].getAttribute('action') || '').trim();
-                        
-                        // 1. Form action 분석
-                        if (!action || action === '' || action === '#' || action === 'about:blank' || action.toLowerCase().startsWith('javascript:')) {
-                            hasExternalOrNullForm = true;
-                        } else if (action.indexOf('http') === 0) {
-                            var formUrl = normalizeUrl(action);
-                            if (formUrl && formUrl.hostname && formUrl.hostname !== hostname) {
-                                hasExternalOrNullForm = true;
-                            }
-                        }
-                        
-                        if (/([a-zA-Z0-9_])+.php/.test(action)) {
-                            hasPhpForm = true;
-                        }
-                        
-                        // 2. 폼 내 입력 필드 분석 (password 필드 존재 = 로그인 폼)
-                        var inputs = forms[i].getElementsByTagName('input');
                         var hasPasswordField = false;
+                        var hasIdentifierField = false;  // email, id, phone, username 등
+                        
+                        var inputs = forms[i].getElementsByTagName('input');
                         for (var j = 0; j < inputs.length; j++) {
                             var inputType = (inputs[j].getAttribute('type') || 'text').toLowerCase();
+                            var inputName = (inputs[j].getAttribute('name') || '').toLowerCase();
+                            var inputPlaceholder = (inputs[j].getAttribute('placeholder') || '').toLowerCase();
+                            var inputId = (inputs[j].getAttribute('id') || '').toLowerCase();
+                            
+                            // Password 필드 감지
                             if (inputType === 'password') {
                                 hasPasswordField = true;
-                                break;
+                            }
+                            
+                            // 식별자 필드 감지: email, id, username, phone, tel, mobile 등
+                            var identifierPatterns = /email|user|login|id|phone|tel|mobile|account|account_no|username|userid/i;
+                            if (identifierPatterns.test(inputName) || 
+                                identifierPatterns.test(inputPlaceholder) || 
+                                identifierPatterns.test(inputId) ||
+                                inputType === 'email') {
+                                hasIdentifierField = true;
                             }
                         }
-                        if (hasPasswordField) {
-                            hasLoginFields = true;
+                        
+                        // 로그인 폼: password AND identifier 필드 모두 있어야 함
+                        if (hasPasswordField && hasIdentifierField) {
+                            hasLoginForm = true;
+                            break;
                         }
                     }
                     
-                    // 로그인 폼: external/null form OR php form OR password 필드가 있는 폼
-                    features.login_form = (hasExternalOrNullForm || hasPhpForm || hasLoginFields) ? 1 : 0;
+                    features.login_form = hasLoginForm ? 1 : 0;
 
                     // submit_email: Check if any form submits to email
                     var hasEmailSubmit = false;
