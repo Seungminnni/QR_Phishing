@@ -534,13 +534,13 @@ class MainActivity : AppCompatActivity() {
         val targetUrl = analysisResult.inspectedUrl ?: currentUrl
 
         val resultText = StringBuilder().apply {
-            append("🤖 ML 기반 피싱 분석 결과\n")
+            append("ML 기반 피싱 분석 결과\n")
             append("━━━━━━━━━━━━━━━━━━━━\n")
-            append("📊 신뢰도 점수: ${(analysisResult.confidenceScore.coerceIn(0.0, 1.0) * 100).toInt()}%\n")
-            append("🎯 판정 결과: ${if (analysisResult.isPhishing) "🚨 피싱 의심" else "✅ 안전"}\n")
-            append("🧪 분석 모드: $modeDescription\n")
+            append("피싱 확률: ${(analysisResult.confidenceScore.coerceIn(0.0, 1.0) * 100).toInt()}%\n")
+            append("판정 결과: ${if (analysisResult.isPhishing) "🚨 피싱 의심" else "✅ 안전"}\n")
+            append("분석 모드: $modeDescription\n")
             targetUrl?.let {
-                append("🌐 분석 URL: $it\n")
+                append("분석 URL: $it\n")
             }
 
             val features = analysisResult.features
@@ -558,19 +558,19 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (analysisResult.riskFactors.isNotEmpty()) {
-                append("\n⚠️ ML 분석 결과:\n")
+                append("\nML 분석 결과:\n")
                 analysisResult.riskFactors.distinct().forEach { factor ->
                     append("• $factor\n")
                 }
             }
 
-            append("\n💡 시스템 특징:\n")
+            append("\n시스템 특징:\n")
             append("• 온-디바이스 ML 모델 사용\n")
             append("• 외부 서버 통신 없음\n")
             append("• WebView 기반 행위 분석\n")
             append("• 실시간 프라이버시 보호\n")
 
-            append("\n💡 권장사항:\n")
+            append("\n권장사항:\n")
             if (analysisResult.isPhishing) {
                 append("• 이 사이트를 신뢰하지 마세요\n")
                 append("• 개인정보를 입력하지 마세요\n")
@@ -600,20 +600,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPhishingWarningDialog(analysisResult: PhishingAnalysisResult) {
         val messageBuilder = StringBuilder().apply {
-            append("🚨 ML 모델이 이 웹페이지를 피싱으로 분석했습니다!\n\n")
-            append("📊 ML 신뢰도: ${(analysisResult.confidenceScore.coerceIn(0.0, 1.0) * 100).toInt()}%\n\n")
-            append("🤖 분석 방식:\n")
+            append("ML 모델이 이 웹페이지를 피싱으로 분석했습니다!\n\n")
+            append("피싱 확률: ${(analysisResult.confidenceScore.coerceIn(0.0, 1.0) * 100).toInt()}%\n\n")
+            append("분석 방식:\n")
             append("• 온-디바이스 머신러닝 모델\n")
             append("• WebView 기반 행위 분석\n")
             append("• 실시간 피처 추출 및 판정\n\n")
             if (analysisResult.riskFactors.isNotEmpty()) {
-                append("⚠️ ML 분석 근거:\n")
+                append("ML 분석 근거:\n")
                 analysisResult.riskFactors.distinct().forEach { factor ->
                     append("• $factor\n")
                 }
                 append("\n")
             }
-            append("🔒 보안 권장사항:\n")
+            append("보안 권장사항:\n")
             append("• 이 사이트에서 어떠한 정보도 입력하지 마세요\n")
             append("• 개인정보, 비밀번호, 신용카드 정보를 절대 입력하지 마세요\n")
             append("• 의심스러운 링크는 클릭하지 마세요\n")
@@ -622,7 +622,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-            .setTitle("🚨 ML 기반 피싱 경고!")
+            .setTitle("ML 기반 피싱 경고!")
             .setMessage(messageBuilder.toString())
             .setPositiveButton("확인") { _, _ -> returnToCameraView() }
             .setCancelable(false)
@@ -644,7 +644,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://unbonneted-kasha-palaverous.ngrok-free.dev/fake-naver.co.kr@malicious-domain.com"
+        private const val DEBUG_AUTO_LAUNCH_URL = ""
         private val STATISTICAL_REPORT_DOMAINS = setOf(
             "trusted-reporting.edgekey.net",
             "fundingchoicesmessages.google.com"
