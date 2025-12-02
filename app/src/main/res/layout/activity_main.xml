@@ -72,14 +72,18 @@
                     android:layout_weight="1"
                     android:maxLines="2"
                     android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
-                    android:textColor="@android:color/black" />
+                    android:textColor="@android:color/black"
+                    android:textSize="12sp" />
 
                 <Button
                     android:id="@+id/openUrlButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:text="가상분석" />
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="4dp"
+                    android:text="분석"
+                    android:textSize="12sp" />
 
                 <ImageButton
                     android:id="@+id/dismissUrlButton"
@@ -132,7 +136,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:orientation="vertical"
-        android:padding="12dp"
+        android:padding="8dp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -148,16 +152,16 @@
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:layout_weight="1">
 
             <TextView
                 android:id="@+id/resultTextView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="12dp"
+                android:padding="8dp"
                 android:text="분석 결과가 여기에 표시됩니다"
-                android:textSize="16sp" />
+                android:textSize="13sp" />
         </ScrollView>
     </LinearLayout>
 
