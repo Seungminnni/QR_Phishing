@@ -644,7 +644,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.naver.com/"
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://unbonneted-kasha-palaverous.ngrok-free.dev/fake-naver.co.kr@malicious-domain.com"
         private val STATISTICAL_REPORT_DOMAINS = setOf(
             "trusted-reporting.edgekey.net",
             "fundingchoicesmessages.google.com"
