@@ -27,6 +27,12 @@
             android:layout_height="match_parent"
             android:visibility="gone" />
 
+        <WebView
+            android:id="@+id/analysisWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/cameraHintText"
             android:layout_width="match_parent"
