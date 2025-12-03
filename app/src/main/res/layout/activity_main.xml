@@ -7,18 +7,6 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="?attr/colorPrimary"
-        android:elevation="4dp"
-        android:theme="@style/ThemeOverlay.AppCompat.ActionBar"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
-
     <FrameLayout
         android:id="@+id/cameraContainer"
         android:layout_width="0dp"
@@ -26,7 +14,7 @@
         app:layout_constraintBottom_toTopOf="@+id/sandboxInfoPanel"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/toolbar">
+        app:layout_constraintTop_toTopOf="parent">
 
         <androidx.camera.view.PreviewView
             android:id="@+id/previewView"
@@ -43,9 +31,9 @@
             android:id="@+id/cameraHintText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_margin="16dp"
+            android:layout_margin="14dp"
             android:background="@drawable/bg_hint_chip"
-            android:padding="12dp"
+            android:padding="10dp"
             android:text="QR을 비추면 위협 URL이 여기에 나타납니다"
             android:textColor="@android:color/white"
             android:textSize="14sp" />
@@ -159,7 +147,7 @@
                 android:id="@+id/resultTextView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="8dp"
+                android:padding="5dp"
                 android:text="분석 결과가 여기에 표시됩니다"
                 android:textSize="13sp" />
         </ScrollView>
