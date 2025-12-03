@@ -1,69 +1,115 @@
-# 🚀 YU Mobile Kotlin - Keras 기반 피싱 탐지 안드로이드 앱
+# 🛡️ QR Phishing Detector - 샌드박스 WebView 기반 피싱 탐지 안드로이드 앱
 
-QR 코드 기반 **온-디바이스 머신러닝** 피싱 탐지 시스템입니다.  
-Keras 모델 + RobustScaler 전처리 + Chaquopy Python 런타임으로 실시간 피싱 감지를 수행합니다.
+QR 코드 스캔 후 **격리된 샌드박스 WebView 환경**에서 URL을 분석하여 피싱 여부를 탐지하는 **온-디바이스 머신러닝** 안드로이드 앱입니다.
+
+> 🔒 **핵심 기술**: 사용자가 실제 웹페이지에 접근하기 **전에** 분석용 WebView에서 먼저 페이지를 로드하고, JavaScript로 71개 피처를 추출한 뒤 TFLite 모델로 피싱 여부를 판정합니다.
 
 ---
 
 ## 📱 주요 기능
 
-### 1. **QR 코드 스캔**
-- CameraX + ML Kit Barcode Scanner로 실시간 QR 인식
-- 감지된 URL 자동 제안
+### 1. **QR 코드 실시간 스캔**
+- CameraX + ML Kit Barcode Scanner로 실시간 QR 코드 인식
+- 감지된 URL 자동 프리뷰 및 "가상분석" 버튼 제공
 
-### 2. **피싱 탐지**
-- **온-디바이스 ML 예측**: 서버 통신 없음
-- **71개 웹 특성 추출**: JavaScript로 DOM 동적 분석
-- **RobustScaler 전처리**: 31개 특성 정규화 + 40개 특성 원본
-- **Keras 신경망**: 93.82% 정확도, 97.92% AUC
+### 2. **샌드박스 WebView 격리 분석**
+- **이중 WebView 아키텍처**:
+  - `analysisWebView`: 사용자에게 보이지 않는 분석 전용 WebView (격리 환경)
+  - `webView`: 안전 판정 후에만 사용자에게 노출되는 사용자용 WebView
+- **보안 설정**:
+  - 파일/콘텐츠 접근 차단 (`allowFileAccess = false`)
+  - 지리위치 비활성화 (`setGeolocationEnabled(false)`)
+  - Safe Browsing 활성화 (`safeBrowsingEnabled = true`)
+  - 다중 윈도우 차단 (`setSupportMultipleWindows(false)`)
 
-### 3. **격리된 분석 환경**
-- WebView 샌드박스: JavaScript, 저장소, 파일 접근 제한
-- 동적 리다이렉션/에러 카운팅
-- 휴리스틱 규칙 보강
+### 3. **온-디바이스 ML 피싱 탐지**
+- **TFLite 모델**: 서버 통신 없이 기기 내에서 추론
+- **71개 웹 피처 추출**: JavaScript 인젝션으로 DOM 동적 분석
+- **RobustScaler 전처리**: 이상치에 강건한 정규화 적용
+- **휴리스틱 보강**: ML 실패 시 규칙 기반 탐지
 
-### 4. **사용자 친화적 결과**
-- 신뢰도 점수 표시
-- 위험 요인 설명
-- 피싱 경고 다이얼로그
+### 4. **사용자 보호 UX**
+- 피싱 탐지 시 경고 다이얼로그 표시
+- 신뢰도 점수 및 위험 요인 상세 설명
+- 위험 URL 접근 차단 후 카메라로 자동 복귀
+
+---
+
+## 🔐 샌드박스 WebView 아키텍처
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MainActivity                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────────────────┐         ┌──────────────────────────┐    │
+│   │  📷 CameraX      │         │  🔍 analysisWebView     │    │
+│   │  + ML Kit QR     │ ──────► │  (사용자에게 숨김)         │    │
+│   │  Scanner         │  URL    │                          │    │
+│   └──────────────────┘         │  • JavaScript 피처 추출   │    │
+│           │                    │  • 캐시 미사용             │    │
+│           │                    │  • 격리된 환경             │    │
+│           ▼                    └────────────┬─────────────┘    │
+│   ┌──────────────────┐                      │                   │
+│   │  URL 프리뷰 카드   │                      │ 피처 JSON         │
+│   │  [가상분석] 버튼   │                      ▼                   │
+│   └──────────────────┘         ┌──────────────────────────┐    │
+│                                │  🧠 PhishingDetector     │    │
+│                                │                          │    │
+│                                │  ScalerPreprocessor      │    │
+│                                │      ↓ 전처리             │    │
+│                                │  TFLitePhishingPredictor │    │
+│                                │      ↓ 추론               │    │
+│                                │  피싱 확률 (0.0~1.0)      │    │
+│                                └────────────┬─────────────┘    │
+│                                             │                   │
+│           ┌─────────────────────────────────┼───────────────┐   │
+│           │                                 │               │   │
+│           ▼                                 ▼               │   │
+│   ┌──────────────────┐         ┌──────────────────────┐     │   │
+│   │  ⚠️ 피싱 경고     │         │  ✅ 안전 판정         │     │   │
+│   │  다이얼로그       │         │                       │     │   │
+│   │                  │         │  webView 로드         │     │   │
+│   │  → 카메라 복귀    │         │  (사용자에게 표시)      │     │   │
+│   └──────────────────┘         └──────────────────────┘     │   │
+│                                                             │   │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## 🏗️ 프로젝트 구조
 
 ```
-YU_mobile_kotlin/
+QR_Phishing/
 ├── 📄 README.md                           ← 이 파일
 ├── 📄 README_SETUP.md                     ← 빌드 및 실행 가이드
-├── 📄 KERAS_ONLY_SUMMARY.md              ← TFLite 제거 변경 사항
-├── 📄 ANDROID_INTEGRATION_GUIDE.md       ← 기술 통합 상세
-├── 📄 ARCHITECTURE.md                     ← 시스템 아키텍처
-├── 📄 IMPLEMENTATION_SUMMARY.md           ← 구현 완료 보고서
+├── 📄 ARCHITECTURE.md                     ← 시스템 아키텍처 상세
 │
-├── build.gradle.kts                       ← Chaquopy 설정 (루트)
+├── build.gradle.kts                       ← 루트 Gradle 설정
 ├── settings.gradle.kts
 ├── gradle.properties
 ├── gradlew / gradlew.bat
 │
 ├── app/
-│   ├── build.gradle.kts                   ← Keras + Python 의존성
+│   ├── build.gradle.kts                   ← 앱 모듈 의존성
 │   ├── proguard-rules.pro
 │   │
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       │
 │       ├── java/com/example/a1/
-│       │   ├── MainActivity.kt             ← UI + 카메라 + QR 스캔
-│       │   ├── PhishingDetector.kt        ← Keras 예측 조율
-│       │   ├── KerasPhishingPredictor.kt  ← Keras 모델 로더 (Chaquopy)
+│       │   ├── MainActivity.kt             ← UI + 카메라 + 이중 WebView 관리
+│       │   ├── PhishingDetector.kt        ← TFLite 모델 조율 + 휴리스틱
+│       │   ├── TFLitePhishingPredictor.kt ← TFLite 모델 로드 및 추론
 │       │   ├── ScalerPreprocessor.kt      ← RobustScaler 전처리
 │       │   ├── WebFeatureExtractor.kt     ← JavaScript 피처 추출
-│       │   └── Types.kt                   ← 타입 정의
+│       │   └── Types.kt                   ← 공용 타입 정의
 │       │
 │       ├── assets/
-│       │   ├── classifier_model.keras     ← Keras 모델 (796 KB)
-│       │   ├── scaler_params.json         ← RobustScaler 파라미터 (2.2 KB)
-│       │   └── feature_info.json          ← 71개 피처 순서 정의 (1.5 KB)
+│       │   ├── phishing_classifier.tflite ← TFLite 모델
+│       │   ├── scaler_params.json         ← RobustScaler 파라미터
+│       │   └── feature_info.json          ← 71개 피처 순서 정의
 │       │
 │       └── res/
 │           ├── layout/activity_main.xml
@@ -71,10 +117,11 @@ YU_mobile_kotlin/
 │           └── values/
 │
 └── phishing/
-    ├── embedding_model.ipynb              ← 모델 학습 노트북
-    ├── classifier_model.keras             ← 학습 후 모델 (소스)
-    ├── scaler_params.json                 ← 학습 후 파라미터 (소스)
-    ├── feature_info.json                  ← 피처 정의 (소스)
+    ├── simple_train.py                    ← 모델 학습 스크립트
+    ├── embedding_model_19features.ipynb   ← 19 피처 임베딩 모델
+    ├── phishing_classifier.tflite         ← 학습된 TFLite 모델
+    ├── scaler_params.json                 ← 학습된 Scaler 파라미터
+    ├── feature_info.json                  ← 피처 정의
     ├── phishing_data.csv                  ← 학습 데이터
     └── data/
         ├── url_features.py
@@ -102,67 +149,105 @@ YU_mobile_kotlin/
 
 ### 1️⃣ 앱 초기화
 ```
-MainActivity 생성
+MainActivity.onCreate()
   ↓
 PhishingDetector 초기화
-  ├─ KerasPhishingPredictor 초기화
-  │  ├─ Python 런타임 시작 (3-5초)
-  │  └─ Keras 모델 로드 (classifier_model.keras)
+  ├─ TFLitePhishingPredictor 초기화
+  │  └─ phishing_classifier.tflite 메모리 매핑 로드
   │
   └─ ScalerPreprocessor 초기화
-     ├─ scaler_params.json 로드
-     └─ feature_info.json 로드
+     ├─ scaler_params.json 로드 (RobustScaler 파라미터)
+     └─ feature_info.json 로드 (71개 피처 순서)
+  ↓
+이중 WebView 설정
+  ├─ webView: 사용자용 (JavaScript ON, 캐시 ON)
+  └─ analysisWebView: 분석용 (JavaScript ON, 캐시 OFF, 숨김)
 ```
 
 ### 2️⃣ QR 코드 스캔
 ```
-카메라 프리뷰 표시
+CameraX 프리뷰 표시
   ↓
-ML Kit Barcode Scanner 실행
+ML Kit BarcodeScanner로 실시간 분석
   ↓
 QR 코드 감지 → URL 추출
   ↓
-URL 유효성 검증
+URL 유효성 검증 (http/https)
   ↓
-"감지된 URL" 카드 표시
+"감지된 URL" 프리뷰 카드 표시
+  └─ [가상분석] 버튼 활성화
 ```
 
-### 3️⃣ 피싱 분석
+### 3️⃣ 샌드박스 분석 (launchSandbox)
 ```
 사용자가 "가상분석" 버튼 클릭
   ↓
-WebView에서 URL 로드
+┌─────────────────────────────────────────────┐
+│  🔒 샌드박스 모드 진입                        │
+│                                             │
+│  • 사용자 WebView: 숨김 상태 유지            │
+│  • 카메라/컨트롤: 숨김                        │
+│  • sandboxInfoPanel: 표시                   │
+└─────────────────────────────────────────────┘
   ↓
-JavaScript로 71개 피처 추출
-  ├─ URL 특성: length_url, nb_dots, ratio_digits_url, ...
-  ├─ DOM 특성: login_form, iframe, nb_extCSS, ...
-  └─ 동적 카운터: nb_redirection, nb_errors, ...
+analysisWebView.loadUrl(url)  ← 사용자에게 보이지 않음
   ↓
-ScalerPreprocessor.preprocessFeatures()
-  ├─ 31개 피처: RobustScaler 적용 (x - median) / IQR
-  └─ 40개 피처: 원본 그대로
+onPageFinished() 트리거
   ↓
-KerasPhishingPredictor.predictWithKeras()
-  ├─ Python Keras 모델 실행
-  └─ 확률값 반환 (0.0 ~ 1.0)
+JavaScript 피처 추출 스크립트 인젝션
+  ├─ URL 구조 분석 (length_url, nb_dots, ip, ...)
+  ├─ DOM 분석 (login_form, iframe, popup_window, ...)
+  ├─ 브랜드 탐지 (domain_in_brand, brand_in_path, ...)
+  └─ 보안 지표 (https_token, sfh, submit_email, ...)
   ↓
-PhishingDetector.analyzePhishing()
-  ├─ 휴리스틱 규칙 적용
-  └─ 최종 판정 (threshold: 0.55)
+WebFeatureExtractor.receiveFeatures(JSON)
+  ↓
+analyzeAndDisplayPhishingResult()
 ```
 
-### 4️⃣ 결과 표시
+### 4️⃣ ML 추론 및 판정
 ```
-피싱 판정 (0.87 > 0.55)
+PhishingDetector.analyzePhishing(features, url)
   ↓
-�� 경고 다이얼로그
-  ├─ ML 신뢰도: 87%
-  ├─ 위험 요인: "로그인 폼 감지", "의심 TLD" 등
-  └─ 권장사항: "정보 입력 금지", "즉시 종료" 등
+ScalerPreprocessor.preprocessFeatures()
+  ├─ RobustScaler 적용: (x - median) / IQR
+  └─ 71개 피처 → 모델 입력 순서로 정렬
   ↓
-WebView 차단
+TFLitePhishingPredictor.predictWithTFLite()
+  ├─ 입력: FloatArray[71]
+  ├─ TFLite Interpreter 실행
+  └─ 출력: 피싱 확률 (0.0 ~ 1.0)
   ↓
-카메라로 복귀
+임계값 비교 (threshold: 0.55)
+  ↓
+PhishingAnalysisResult 반환
+```
+
+### 5️⃣ 결과 처리
+```
+if (isPhishing && confidence > 0.55)
+  ↓
+⚠️ 경고 다이얼로그 표시
+  ├─ "피싱 위험 감지!"
+  ├─ 신뢰도: 87%
+  ├─ 위험 요인:
+  │  • 로그인 폼 감지
+  │  • 의심스러운 TLD
+  │  • 단축 URL 서비스
+  └─ [확인] → returnToCameraView()
+  ↓
+샌드박스 정리:
+  • analysisWebView.loadUrl("about:blank")
+  • analysisWebView.clearCache(true)
+  • webView.loadUrl("about:blank")
+  ↓
+카메라 모드 복귀
+
+else (안전)
+  ↓
+사용자 WebView에 URL 로드
+  ↓
+정상 브라우징 허용
 ```
 
 ---
@@ -173,18 +258,18 @@ WebView 차단
 - **언어**: Kotlin
 - **최소 SDK**: API 26 (Android 8.0)
 - **대상 SDK**: API 36 (Android 15)
-- **아키텍처**: 단일 Activity + WebView 기반
+- **아키텍처**: 단일 Activity + 이중 WebView 샌드박스
 
 ### ML/AI 스택
-- **모델**: TensorFlow Keras
-- **아키텍처**: Dense NN (71 → 256 → 128 → 64 → 32 → 16 → 1)
+- **모델**: TensorFlow Lite
+- **입력**: 71개 피처 (FloatArray)
+- **출력**: 피싱 확률 (0.0 ~ 1.0)
 - **전처리**: RobustScaler (중앙값 기반, 이상치 강건)
-- **배포**: Chaquopy (Android에서 Python 실행)
 
 ### 주요 라이브러리
 ```kotlin
-// ML & 모델
-"com.chaquo.python:python:16.0.0"              // Python 런타임
+// TensorFlow Lite
+"org.tensorflow:tensorflow-lite:2.14.0"
 
 // 카메라 & QR 스캔
 "androidx.camera:camera-core:1.3.4"
@@ -201,12 +286,211 @@ WebView 차단
 
 ---
 
+## 📋 핵심 클래스 설명
+
+### `MainActivity.kt` (804 lines)
+**역할**: UI 관리, 카메라 제어, 이중 WebView 관리
+
+```kotlin
+// 이중 WebView 선언
+private lateinit var webView: WebView         // 사용자용
+private lateinit var analysisWebView: WebView // 분석용 (숨김)
+
+// 샌드박스 진입
+private fun launchSandbox(url: String) {
+    // 사용자 WebView는 숨김 상태 유지
+    analysisWebView.loadUrl(url)  // 분석용 WebView만 로드
+}
+
+// 피처 추출 후 분석
+private fun extractWebFeatures() {
+    analysisWebView.evaluateJavascript(
+        webFeatureExtractor.getFeatureExtractionScript(),
+        null
+    )
+}
+```
+
+**주요 메서드**:
+- `setupUserWebView()`: 사용자용 WebView 보안 설정
+- `setupAnalysisWebView()`: 분석용 WebView 격리 설정 + JavaScript 브릿지
+- `launchSandbox(url)`: 샌드박스 모드 진입
+- `returnToCameraView()`: 샌드박스 정리 및 카메라 복귀
+
+---
+
+### `PhishingDetector.kt` (96 lines)
+**역할**: TFLite 모델 조율 + 휴리스틱 규칙
+
+```kotlin
+class PhishingDetector(private val context: Context) {
+    private val tflitePredictor: TFLitePhishingPredictor?
+    private val scalerPreprocessor: ScalerPreprocessor?
+    
+    companion object {
+        private const val ML_THRESHOLD = 0.55f
+    }
+
+    fun analyzePhishing(features: WebFeatures, currentUrl: String?): PhishingAnalysisResult {
+        // 1. 휴리스틱 규칙 (설명 가능성)
+        if (features["shortening_service"] == 1.0f) 
+            riskReasons.add("단축 URL 서비스 감지")
+        if (features["login_form"] == 1.0f) 
+            riskReasons.add("로그인/외부 폼 감지")
+        
+        // 2. TFLite 모델 예측
+        val preprocessed = scalerPreprocessor.preprocessFeatures(features)
+        val mlScore = tflitePredictor.predictWithTFLite(preprocessed)
+        
+        // 3. 최종 판정
+        return PhishingAnalysisResult(
+            isPhishing = mlScore >= ML_THRESHOLD,
+            confidenceScore = mlScore,
+            riskFactors = riskReasons
+        )
+    }
+}
+```
+
+---
+
+### `TFLitePhishingPredictor.kt` (131 lines)
+**역할**: TFLite 모델 로드 및 추론
+
+```kotlin
+class TFLitePhishingPredictor(private val context: Context) {
+    private var interpreter: Interpreter? = null
+    
+    companion object {
+        private const val MODEL_FILE = "phishing_classifier.tflite"
+        private const val INPUT_SIZE = 71  // 71개 피처
+    }
+
+    private fun loadModel() {
+        val modelBuffer = loadModelFile()  // Assets에서 메모리 매핑
+        interpreter = Interpreter(modelBuffer)
+    }
+
+    fun predictWithTFLite(features: FloatArray): Float {
+        val input = arrayOf(features)           // [1, 71]
+        val output = Array(1) { FloatArray(1) } // [1, 1]
+        
+        interpreter?.run(input, output)
+        return output[0][0].coerceIn(0f, 1f)
+    }
+}
+```
+
+---
+
+### `ScalerPreprocessor.kt` (127 lines)
+**역할**: RobustScaler 전처리
+
+```kotlin
+class ScalerPreprocessor(private val context: Context) {
+    private var robustCols: List<String>    // 스케일링할 피처 목록
+    private var robustCenter: List<Float>   // median 값
+    private var robustScale: List<Float>    // IQR 값
+    private var rawCols: List<String>       // 스케일링 안 할 피처
+
+    fun preprocessFeatures(features: WebFeatures): FloatArray {
+        val result = FloatArray(71)
+        
+        for ((index, featureName) in featureColumnOrder.withIndex()) {
+            val value = features[featureName] ?: 0f
+            
+            result[index] = if (robustCols.contains(featureName)) {
+                // RobustScaler: (x - median) / IQR
+                (value - center) / scale
+            } else {
+                value  // 원본 그대로
+            }
+        }
+        return result
+    }
+}
+```
+
+---
+
+### `WebFeatureExtractor.kt` (563 lines)
+**역할**: JavaScript 인젝션으로 웹페이지 피처 추출
+
+```kotlin
+class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
+
+    @JavascriptInterface
+    fun receiveFeatures(featuresJson: String) {
+        // JSON → Map<String, Float?> 변환
+        val features = parseFeatures(featuresJson)
+        callback(features)
+    }
+
+    fun getFeatureExtractionScript(): String {
+        return """
+            javascript:(function() {
+                var features = {};
+                
+                // URL 구조 분석
+                features.length_url = url.length;
+                features.nb_dots = (url.match(/\./g) || []).length;
+                features.ip = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) ? 1 : 0;
+                
+                // DOM 분석
+                features.login_form = hasLoginForm ? 1 : 0;
+                features.iframe = invisibleIframeCount > 0 ? 1 : 0;
+                
+                // 브랜드 탐지
+                features.domain_in_brand = brandKeywords.includes(domain) ? 1 : 0;
+                
+                Android.receiveFeatures(JSON.stringify(features));
+            })();
+        """.trimIndent()
+    }
+}
+```
+
+**추출하는 주요 피처 (71개 중 일부)**:
+
+| 카테고리 | 피처 | 설명 |
+|---------|------|------|
+| URL 구조 | `length_url` | URL 전체 길이 |
+| URL 구조 | `nb_dots` | 점(.) 개수 |
+| URL 구조 | `ip` | IP 주소 여부 |
+| URL 구조 | `shortening_service` | 단축 URL 여부 |
+| DOM 분석 | `login_form` | 로그인 폼 존재 여부 |
+| DOM 분석 | `iframe` | 숨겨진 iframe 존재 |
+| DOM 분석 | `popup_window` | prompt() 사용 여부 |
+| 보안 | `https_token` | HTTPS 미사용 시 1 |
+| 보안 | `sfh` | 폼 액션이 빈 값/외부 |
+| 브랜드 | `domain_in_brand` | 도메인이 유명 브랜드 |
+| 브랜드 | `brand_in_path` | 경로에 브랜드명 포함 |
+
+---
+
+### `Types.kt` (14 lines)
+**역할**: 공용 타입 정의
+
+```kotlin
+typealias WebFeatures = Map<String, Float?>
+
+data class PhishingAnalysisResult(
+    val inspectedUrl: String? = null,
+    val isPhishing: Boolean = false,
+    val confidenceScore: Double = 0.0,
+    val features: WebFeatures? = null,
+    val riskFactors: List<String> = emptyList()
+)
+```
+
+---
+
 ## 📦 빌드 & 배포
 
 ### 빌드 명령어
 
 ```bash
-cd /home/wza/YU_mobile_kotlin
+cd /home/wza/QR_Phishing
 
 # 전체 빌드
 ./gradlew clean build
@@ -219,18 +503,17 @@ cd /home/wza/YU_mobile_kotlin
 ```
 
 ### 빌드 시간
-- **첫 번째**: 5-10분 (Python 환경 설치)
-- **이후**: 2-3분 (캐시 활용)
+- **첫 번째**: 2-3분
+- **이후**: 30초-1분 (캐시 활용)
 
 ### APK 크기
-- **기존**: ~50 MB
-- **증가분**: ~80-110 MB (Chaquopy + TensorFlow + Keras)
-- **총합**: ~130-160 MB
+- **디버그**: ~15-20 MB
+- **릴리스**: ~10-15 MB
 
 ### 메모리 사용
-- **초기화**: 30-50 MB
-- **모델 로드**: 50 MB
-- **피크**: 100-150 MB
+- **초기화**: 20-30 MB
+- **TFLite 모델 로드**: 5-10 MB
+- **피크**: 50-80 MB
 
 ---
 
@@ -240,7 +523,7 @@ cd /home/wza/YU_mobile_kotlin
 
 1. **프로젝트 열기**
    ```
-   File → Open → /home/wza/YU_mobile_kotlin
+   File → Open → /home/wza/QR_Phishing
    ```
 
 2. **빌드**
@@ -258,7 +541,7 @@ cd /home/wza/YU_mobile_kotlin
 ### 터미널에서
 
 ```bash
-cd /home/wza/YU_mobile_kotlin
+cd /home/wza/QR_Phishing
 
 # 설치 & 실행
 ./gradlew installDebug
@@ -273,76 +556,39 @@ adb shell am start -n com.example.a1/.MainActivity
 
 ```bash
 # 전체 로그
-adb logcat | grep -E "(PhishingDetector|Keras|Scaler)"
+adb logcat | grep -E "(PhishingDetector|TFLite|Scaler|WebFeatureExtractor)"
 
-# Keras 초기화 확인
-adb logcat KerasPhishingPredictor
+# TFLite 초기화 확인
+adb logcat TFLitePhishingPredictor:D *:S
+
+# 피처 추출 확인
+adb logcat WebFeatureExtractor:D *:S
 
 # 전처리 과정 확인
-adb logcat ScalerPreprocessor
+adb logcat ScalerPreprocessor:D *:S
 
 # 최종 판정 확인
-adb logcat PhishingDetector
+adb logcat PhishingDetector:D *:S
 ```
 
 ### 예상 정상 로그
 
 ```
-PhishingDetector: ✅ Keras 모델 초기화 성공
+TFLitePhishingPredictor: ✅ TFLite 모델 로드 성공
+TFLitePhishingPredictor: 📊 모델 구조:
+TFLitePhishingPredictor:   입력 Shape: [1, 71]
+TFLitePhishingPredictor:   출력 Shape: [1, 1]
 ScalerPreprocessor: ✅ ScalerPreprocessor 초기화 성공
+PhishingDetector: ✅ TFLite 모델 초기화 성공
 
 [사용자가 URL 분석 시작]
 
-PhishingDetector: 🤖 Keras 모델로 예측 시작
+MainActivity: SANDBOX_START - Analysis WebView만 로드 시작
+WebFeatureExtractor: RAW_FEATURES_JSON: {...}
+PhishingDetector: 🤖 TFLite 모델로 예측 시작
 ScalerPreprocessor: 피처 전처리 완료: 71개 값
-KerasPhishingPredictor: ✅ Keras 예측 성공: 0.87
-PhishingDetector: ✅ Keras 예측 성공: 0.87
-```
-
----
-
-## 📋 주요 클래스
-
-### `MainActivity.kt` (메인 UI)
-- QR 카메라 스캔
-- WebView 관리
-- 분석 결과 표시
-- 경고 다이얼로그 처리
-
-### `PhishingDetector.kt` (예측 조율)
-- Keras 모델 호출
-- 휴리스틱 규칙 적용
-- 최종 판정 (이진 분류: 피싱/안전)
-- 신뢰도 점수 계산
-
-### `KerasPhishingPredictor.kt` (Keras 로더)
-- Chaquopy Python 초기화
-- Assets에서 모델 파일 복사
-- TensorFlow Keras 모델 로드
-- 전처리된 입력으로 예측 실행
-
-### `ScalerPreprocessor.kt` (전처리)
-- scaler_params.json 파싱
-- RobustScaler 변환: `(x - center) / scale`
-- 31개 특성만 정규화, 40개는 원본
-- 71개 피처를 모델 입력 순서로 정렬
-
-### `WebFeatureExtractor.kt` (피처 추출)
-- JavaScript 주입 & 실행
-- DOM 분석으로 71개 피처 추출
-- Android 콜백으로 피처 반환
-
-### `Types.kt` (타입 정의)
-```kotlin
-typealias WebFeatures = Map<String, Float?>
-
-data class PhishingAnalysisResult(
-    val inspectedUrl: String? = null,
-    val isPhishing: Boolean = false,
-    val confidenceScore: Double = 0.0,
-    val features: WebFeatures? = null,
-    val riskFactors: List<String> = emptyList()
-)
+TFLitePhishingPredictor: ✅ TFLite 예측 성공: 0.87
+PhishingDetector: ✅ TFLite 예측 성공: 0.87
 ```
 
 ---
@@ -353,20 +599,49 @@ data class PhishingAnalysisResult(
 - **카메라**: 필수 (QR 스캔)
 - **저장소**: 선택사항 (사진 저장)
 
-### Chaquopy 호환성
-- **최소 SDK**: API 26 (API 21-25는 작동 안 함)
-- **Python**: 3.11만 지원
-- **ABIs**: arm64-v8a (기본), armeabi-v7a 지원
-
-### 메모리 제약
-- Python 런타임: ~30-50 MB
-- 모델 로드 후 메모리 사용량 증가
-- 저사양 기기(RAM < 512MB)에서 문제 가능
+### TFLite 호환성
+- **최소 SDK**: API 26
+- **TensorFlow Lite**: 2.14.0
+- **ABIs**: arm64-v8a, armeabi-v7a
 
 ### 성능
-- **첫 앱 시작**: 3-5초 (Python 초기화)
-- **재시작**: <500ms
-- **분석 시간**: 100-220ms
+- **앱 시작**: <1초
+- **TFLite 모델 로드**: <500ms
+- **분석 시간**: 100-200ms (피처 추출 + 추론)
+
+---
+
+## 🔐 보안 고려사항
+
+### WebView 샌드박스 설정
+```kotlin
+with(analysisWebView.settings) {
+    // 파일 접근 차단
+    allowFileAccess = false
+    allowContentAccess = false
+    allowFileAccessFromFileURLs = false
+    allowUniversalAccessFromFileURLs = false
+    
+    // 위치 정보 비활성화
+    setGeolocationEnabled(false)
+    
+    // Safe Browsing 활성화
+    safeBrowsingEnabled = true
+    
+    // 다중 윈도우 차단
+    setSupportMultipleWindows(false)
+    
+    // 캐시 미사용 (분석용)
+    cacheMode = WebSettings.LOAD_NO_CACHE
+}
+```
+
+### 격리 확인 로깅
+```kotlin
+private fun logIsolationCheck(event: String, url: String?, message: String) {
+    Log.d("ISOLATION_CHECK", "[$event] $message - URL: $url")
+}
+```
 
 ---
 
