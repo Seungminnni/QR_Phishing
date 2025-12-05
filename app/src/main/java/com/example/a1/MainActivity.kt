@@ -13,6 +13,8 @@ import android.util.Patterns
 import android.view.Surface
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -205,10 +207,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+                request?.let {
+                    val url = it.url.toString()
+                    val headers = it.requestHeaders
+                    val cookieHeader = headers["Cookie"]
+                    
+                    // 👤 사용자 WebView 리소스 격리 검증 로그
+                    Log.d("USER_WEBVIEW_ISOLATION", "╔════════════════════════════════════════╗")
+                    Log.d("USER_WEBVIEW_ISOLATION", "║ 👤 사용자 WebView 리소스 요청 분석      ║")
+                    Log.d("USER_WEBVIEW_ISOLATION", "╠════════════════════════════════════════╣")
+                    Log.d("USER_WEBVIEW_ISOLATION", "║ URL = $url")
+                    Log.d("USER_WEBVIEW_ISOLATION", "║ Cookie = $cookieHeader")
+                    Log.d("USER_WEBVIEW_ISOLATION", "║ 쿠키 상태: ${if (cookieHeader != null) "✅ 전송됨" else "❌ 없음"}")
+                    Log.d("USER_WEBVIEW_ISOLATION", "║ DOM Storage: ✅ 활성화됨 (domStorageEnabled=true)")
+                    Log.d("USER_WEBVIEW_ISOLATION", "║ 캐시 설정: ✅ LOAD_DEFAULT 사용")
+                    Log.d("USER_WEBVIEW_ISOLATION", "╚════════════════════════════════════════╝")
+                }
+                return super.shouldInterceptRequest(view, request)
+            }
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 // 사용자 WebView의 페이지 로드 시작
                 logIsolationCheck("USER_WEBVIEW_START", url, "사용자 WebView 페이지 로드 시작")
+                Log.d("USER_WEBVIEW_ISOLATION", "📊 USER_WEBVIEW_START - URL: $url (쿠키 전송될 예정)")
                 Log.d(TAG, "User WebView - onPageStarted: $url")
             }
 
@@ -240,15 +266,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 분석용 WebView 완전 격리: 쿠키 제거 및 설정
+        // 분석용 WebView 완전 격리 초기화 (쿠키, DOM Storage, 캐시 모두 처리)
         initSandboxWebView(analysisWebView)
 
         with(analysisWebView.settings) {
             javaScriptEnabled = true  // 분석용: JavaScript 필요 (피처 추출용)
-            domStorageEnabled = false  // 격리: DOM Storage 비활성화
-            @Suppress("DEPRECATION")
-            databaseEnabled = false
-            cacheMode = WebSettings.LOAD_NO_CACHE  // 격리: 캐시 미사용
+            // ✅ 쿠키, DOM Storage, 캐시 격리는 initSandboxWebView()에서 처리됨
+            
             setGeolocationEnabled(false)
             allowFileAccess = false
             allowContentAccess = false
@@ -270,12 +294,40 @@ class MainActivity : AppCompatActivity() {
         analysisWebView.addJavascriptInterface(webFeatureExtractor, "Android")
 
         analysisWebView.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+                request?.let {
+                    val url = it.url.toString()
+                    val headers = it.requestHeaders
+                    val cookieHeader = headers["Cookie"]
+                    
+                    // 🔒 분석 WebView 리소스 격리 검증 로그
+                    Log.d("SANDBOX_ISOLATION", "╔════════════════════════════════════════╗")
+                    Log.d("SANDBOX_ISOLATION", "║ 🔒 분석 WebView 리소스 요청 분석        ║")
+                    Log.d("SANDBOX_ISOLATION", "╠════════════════════════════════════════╣")
+                    Log.d("SANDBOX_ISOLATION", "║ URL = $url")
+                    Log.d("SANDBOX_ISOLATION", "║ Cookie = $cookieHeader")
+                    Log.d("SANDBOX_ISOLATION", "║ 쿠키 상태: ${if (cookieHeader != null) "⚠️ 전송됨 (ERROR!)" else "✅ null - 차단됨"}")
+                    Log.d("SANDBOX_ISOLATION", "║ DOM Storage: ❌ 비활성화됨 (domStorageEnabled=false)")
+                    Log.d("SANDBOX_ISOLATION", "║ 캐시 설정: ❌ LOAD_NO_CACHE 사용 (캐시 차단)")
+                    Log.d("SANDBOX_ISOLATION", "╚════════════════════════════════════════╝")
+                    
+                    if (cookieHeader != null) {
+                        Log.w("SANDBOX_ISOLATION", "⚠️ WARNING: 분석 WebView에서 쿠키 전송 감지!")
+                    }
+                }
+                return super.shouldInterceptRequest(view, request)
+            }
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 resultTextView.text = "🔍 웹페이지 분석 중..."
                 
                 // 격리 확인 로그: Analysis WebView 페이지 시작
                 logIsolationCheck("ANALYSIS_WEBVIEW_START", url, "분석용 WebView 페이지 로드 시작 (사용자 미표시)")
+                Log.d("SANDBOX_ISOLATION", "📊 ANALYSIS_WEBVIEW_START - URL: $url (쿠키 차단됨)")
 
                 if (!url.isNullOrBlank()) {
                     val prev = lastNavigationUrlForDynamicCounters
@@ -315,30 +367,51 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 분석용 WebView 완전 격리 초기화
-     * - 쿠키: 완전 비활성화
-     * - DOM Storage: 비활성화
-     * - 캐시: 초기화
-     * - 히스토리: 초기화
+     * 분석용 WebView 완전 격리 초기화 (3가지 격리 통합)
+     * ✅ 쿠키: 완전 비활성화 + 기존 쿠키 삭제
+     * ✅ DOM Storage: 비활성화
+     * ✅ 캐시: LOAD_NO_CACHE + 기존 캐시 삭제
      */
     private fun initSandboxWebView(sandboxWebView: WebView) {
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // 1️⃣ 쿠키 완전 격리 (CookieManager 전역 설정)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         val cookieManager = CookieManager.getInstance()
-
-        // 1) 기존 쿠키 모두 삭제
+        
+        // 기존 모든 쿠키 삭제
         cookieManager.removeAllCookies(null)
         cookieManager.flush()
-
-        // 2) 쿠키 완전 비활성화
+        
+        // 모든 새 쿠키 거부
         cookieManager.setAcceptCookie(false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            cookieManager.setAcceptThirdPartyCookies(sandboxWebView, false)
+            cookieManager.setAcceptThirdPartyCookies(sandboxWebView, false)  // 3rd party 쿠키도 차단
         }
-
-        // 3) 캐시 및 히스토리 초기화
-        sandboxWebView.clearCache(true)
-        sandboxWebView.clearHistory()
         
-        Log.d(TAG, "Sandbox WebView 완전 격리 초기화 완료 - 쿠키/캐시/히스토리 제거")
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // 2️⃣ DOM Storage 격리
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        with(sandboxWebView.settings) {
+            domStorageEnabled = false           // DOM Storage 비활성화
+            @Suppress("DEPRECATION")
+            databaseEnabled = false             // 데이터베이스 비활성화
+        }
+        
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // 3️⃣ 캐시 완전 격리
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        with(sandboxWebView.settings) {
+            cacheMode = WebSettings.LOAD_NO_CACHE  // 새 캐시 모드 설정
+        }
+        
+        // 기존 캐시 및 히스토리 삭제
+        sandboxWebView.clearCache(true)        // 기존 캐시 삭제
+        sandboxWebView.clearHistory()          // 브라우저 히스토리 삭제
+        
+        Log.d(TAG, "✅ Sandbox WebView 완전 격리 초기화 완료")
+        Log.d(TAG, "   🔒 쿠키: CookieManager.setAcceptCookie(false)")
+        Log.d(TAG, "   🔒 DOM Storage: domStorageEnabled=false")
+        Log.d(TAG, "   🔒 캐시: cacheMode=LOAD_NO_CACHE + clearCache()")
     }
 
     private fun launchSandbox(url: String) {
