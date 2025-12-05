@@ -12,6 +12,7 @@ import android.util.Log
 import android.util.Patterns
 import android.view.Surface
 import android.view.View
+import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -239,12 +240,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 분석용 WebView 완전 격리: 쿠키 제거 및 설정
+        initSandboxWebView(analysisWebView)
+
         with(analysisWebView.settings) {
-            javaScriptEnabled = true  // 분석용: JavaScript 필요
-            domStorageEnabled = true
+            javaScriptEnabled = true  // 분석용: JavaScript 필요 (피처 추출용)
+            domStorageEnabled = false  // 격리: DOM Storage 비활성화
             @Suppress("DEPRECATION")
             databaseEnabled = false
-            cacheMode = WebSettings.LOAD_NO_CACHE  // 분석용: 캐시 미사용
+            cacheMode = WebSettings.LOAD_NO_CACHE  // 격리: 캐시 미사용
             setGeolocationEnabled(false)
             allowFileAccess = false
             allowContentAccess = false
@@ -308,6 +312,33 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
         }
+    }
+
+    /**
+     * 분석용 WebView 완전 격리 초기화
+     * - 쿠키: 완전 비활성화
+     * - DOM Storage: 비활성화
+     * - 캐시: 초기화
+     * - 히스토리: 초기화
+     */
+    private fun initSandboxWebView(sandboxWebView: WebView) {
+        val cookieManager = CookieManager.getInstance()
+
+        // 1) 기존 쿠키 모두 삭제
+        cookieManager.removeAllCookies(null)
+        cookieManager.flush()
+
+        // 2) 쿠키 완전 비활성화
+        cookieManager.setAcceptCookie(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            cookieManager.setAcceptThirdPartyCookies(sandboxWebView, false)
+        }
+
+        // 3) 캐시 및 히스토리 초기화
+        sandboxWebView.clearCache(true)
+        sandboxWebView.clearHistory()
+        
+        Log.d(TAG, "Sandbox WebView 완전 격리 초기화 완료 - 쿠키/캐시/히스토리 제거")
     }
 
     private fun launchSandbox(url: String) {
@@ -781,7 +812,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.naver.com/" // 여기 url 하드코딩
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.google.com/" // 여기 url 하드코딩
         private val STATISTICAL_REPORT_DOMAINS = setOf(
             "trusted-reporting.edgekey.net",
             "fundingchoicesmessages.google.com"
