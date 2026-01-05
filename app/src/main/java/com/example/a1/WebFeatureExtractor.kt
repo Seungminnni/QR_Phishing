@@ -17,9 +17,21 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
 
             val jsonObject = JSONObject(featuresJson)
             val features = mutableMapOf<String, Float?>()
+            
+            // statistical_report 계산 (DNS 조회 필요) - 먼저 계산
+            val statisticalReport = calculateStatisticalReport(jsonObject)
+            features["statistical_report"] = statisticalReport.toFloat()
+            
             val keys = jsonObject.keys()
             while (keys.hasNext()) {
                 val key = keys.next()
+                
+                // 문자열 필드는 제외 (Float로 변환 불가)
+                if (key == "hostname" || key == "raw_url") {
+                    Log.d("WebFeatureExtractor", "Skipping string field: $key")
+                    continue
+                }
+                
                 if (jsonObject.isNull(key)) {
                     features[key] = null
                     continue
@@ -45,13 +57,9 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                 }
             }
 
-            // statistical_report 계산 (DNS 조회 필요)
-            val statisticalReport = calculateStatisticalReport(jsonObject)
-            features["statistical_report"] = statisticalReport.toFloat()
-
             val presentCount = features.count { it.value != null }
             val nullCount = features.count { it.value == null }
-            Log.d("WebFeatureExtractor", "Parsed features: total=${features.size}, present=$presentCount, null=$nullCount")
+            Log.d("WebFeatureExtractor", "Parsed features: total=${features.size}, present=$presentCount, null=$nullCount, statistical_report=${features["statistical_report"]}")
             callback(features)
         } catch (e: Exception) {
             Log.e("WebFeatureExtractor", "Failed to parse feature JSON", e)
@@ -60,7 +68,8 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
 
     /**
      * statistical_report 계산 (Python 로직 재현)
-     * Returns: 1 (의심), 0 (정상), 2 (예외/미결정)
+     * Returns: 1 (의심), 0 (정상)
+     * Note: DNS 조회 실패 시에는 0을 반환 (Python에서 except: return 2는 모델 학습과 무관한 예외 상황)
      */
     private fun calculateStatisticalReport(jsonObject: JSONObject): Int {
         try {
@@ -89,35 +98,35 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                 "54\\.82\\.156\\.19|37\\.157\\.192\\.102|204\\.11\\.56\\.48|110\\.34\\.231\\.42"
             )
 
-            val url = jsonObject.optString("length_url", "")
-            
-            // URL 패턴 매칭
-            if (suspiciousUrlPatterns.containsMatchIn(url)) {
-                Log.d("WebFeatureExtractor", "statistical_report: suspicious URL pattern matched")
+            // JavaScript에서 전달된 raw_url 확인
+            val rawUrl = jsonObject.optString("raw_url", "")
+            if (rawUrl.isNotEmpty() && suspiciousUrlPatterns.containsMatchIn(rawUrl)) {
+                Log.d("WebFeatureExtractor", "statistical_report: suspicious URL pattern matched in '$rawUrl'")
                 return 1
             }
 
-            // IP 주소 조회 및 패턴 매칭
-            try {
-                val hostname = jsonObject.optString("length_hostname", "")
-                if (hostname.isNotEmpty()) {
+            // JavaScript에서 전달된 hostname 확인
+            val hostname = jsonObject.optString("hostname", "")
+            if (hostname.isNotEmpty()) {
+                try {
                     val ipAddress = java.net.InetAddress.getByName(hostname).hostAddress
-                    Log.d("WebFeatureExtractor", "Resolved IP: $ipAddress")
+                    Log.d("WebFeatureExtractor", "Resolved IP: $ipAddress for hostname: $hostname")
                     
-                    if (suspiciousIpPatterns.containsMatchIn(ipAddress)) {
+                    if (ipAddress != null && suspiciousIpPatterns.containsMatchIn(ipAddress)) {
                         Log.d("WebFeatureExtractor", "statistical_report: suspicious IP pattern matched")
                         return 1
                     }
+                } catch (e: Exception) {
+                    // DNS 조회 실패: 로그만 기록하고 0 반환 (예외는 모델 학습과 무관)
+                    Log.d("WebFeatureExtractor", "statistical_report: DNS lookup failed for hostname '$hostname' - ${e.message}")
+                    return 0
                 }
-            } catch (e: Exception) {
-                Log.d("WebFeatureExtractor", "statistical_report: DNS lookup failed or exception")
-                return 2  // Python: except: return 2
             }
 
             return 0  // 정상
         } catch (e: Exception) {
             Log.e("WebFeatureExtractor", "Error calculating statistical_report", e)
-            return 2
+            return 0  // 예외 시 0 반환
         }
     }
 
@@ -180,6 +189,10 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     var pathWords = w_path;
 
                     var features = {};
+
+                    // statistical_report 계산에 필요한 필드들
+                    features.hostname = hostname;  // DNS 조회 및 IP 매칭에 필요
+                    features.raw_url = url;        // URL 패턴 매칭에 필요
 
                     features.length_url = url.length;
                     features.length_hostname = hostname.length;
