@@ -1,6 +1,5 @@
-
 package com.example.a1
-
+import android.webkit.CookieManager
 import android.Manifest
 import android.content.ContentValues
 import android.content.Intent
@@ -12,9 +11,6 @@ import android.util.Log
 import android.util.Patterns
 import android.view.Surface
 import android.view.View
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -51,15 +47,17 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-
+import com.example.a1.DynamicAnalysis
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var dynamic: DynamicAnalysis // 동적 분석
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var barcodeScanner: BarcodeScanner
     private lateinit var previewView: PreviewView
     private lateinit var resultTextView: TextView
     private lateinit var webView: WebView  // 사용자용 WebView
     private lateinit var analysisWebView: WebView  // 분석용 WebView
+    private lateinit var dynamicWebView: WebView //분석용 동적 WebView
     private lateinit var captureButton: FloatingActionButton
     private lateinit var openGalleryButton: ImageButton
     private lateinit var cameraControls: View
@@ -88,7 +86,8 @@ class MainActivity : AppCompatActivity() {
     private var isAnalyzingFeatures = false
     private var lastWarningShownForUrl: String? = null
     private lateinit var phishingDetector: PhishingDetector
-
+    private var lastCrpLogKey: String? = null
+    private var autoSubmitArmed: Boolean = false
     private val requiredPermissions: Array<String> by lazy {
         val list = mutableListOf(Manifest.permission.CAMERA)
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
@@ -110,6 +109,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -129,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         dismissUrlButton = findViewById(R.id.dismissUrlButton)
         sandboxInfoPanel = findViewById(R.id.sandboxInfoPanel)
         exitSandboxButton = findViewById(R.id.exitSandboxButton)
+        dynamicWebView = findViewById(R.id.dynamicWebView)
 
         setupWebView()
 
@@ -172,6 +175,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
         onBackPressedDispatcher.addCallback(this, callback)
 
         // Call after other setup, ensuring views are ready
@@ -181,6 +185,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupWebView() {
         setupUserWebView()
         setupAnalysisWebView()
+        setupDynamicWebView()
     }
 
     private fun setupUserWebView() {
@@ -207,34 +212,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): WebResourceResponse? {
-                request?.let {
-                    val url = it.url.toString()
-                    val headers = it.requestHeaders
-                    val cookieHeader = headers["Cookie"]
-                    
-                    // 👤 사용자 WebView 리소스 격리 검증 로그
-                    Log.d("USER_WEBVIEW_ISOLATION", "╔════════════════════════════════════════╗")
-                    Log.d("USER_WEBVIEW_ISOLATION", "║ 👤 사용자 WebView 리소스 요청 분석      ║")
-                    Log.d("USER_WEBVIEW_ISOLATION", "╠════════════════════════════════════════╣")
-                    Log.d("USER_WEBVIEW_ISOLATION", "║ URL = $url")
-                    Log.d("USER_WEBVIEW_ISOLATION", "║ Cookie = $cookieHeader")
-                    Log.d("USER_WEBVIEW_ISOLATION", "║ 쿠키 상태: ${if (cookieHeader != null) "✅ 전송됨" else "❌ 없음"}")
-                    Log.d("USER_WEBVIEW_ISOLATION", "║ DOM Storage: ✅ 활성화됨 (domStorageEnabled=true)")
-                    Log.d("USER_WEBVIEW_ISOLATION", "║ 캐시 설정: ✅ LOAD_DEFAULT 사용")
-                    Log.d("USER_WEBVIEW_ISOLATION", "╚════════════════════════════════════════╝")
-                }
-                return super.shouldInterceptRequest(view, request)
-            }
-
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+
                 super.onPageStarted(view, url, favicon)
                 // 사용자 WebView의 페이지 로드 시작
                 logIsolationCheck("USER_WEBVIEW_START", url, "사용자 WebView 페이지 로드 시작")
-                Log.d("USER_WEBVIEW_ISOLATION", "📊 USER_WEBVIEW_START - URL: $url (쿠키 전송될 예정)")
                 Log.d(TAG, "User WebView - onPageStarted: $url")
             }
 
@@ -266,13 +248,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 분석용 WebView 완전 격리 초기화 (쿠키, DOM Storage, 캐시 모두 처리)
-        initSandboxWebView(analysisWebView)
-
         with(analysisWebView.settings) {
-            javaScriptEnabled = true  // 분석용: JavaScript 필요 (피처 추출용)
-            // ✅ 쿠키, DOM Storage, 캐시 격리는 initSandboxWebView()에서 처리됨
-            
+            javaScriptEnabled = true  // 분석용: JavaScript 필요
+            domStorageEnabled = true
+            @Suppress("DEPRECATION")
+            databaseEnabled = false
+            cacheMode = WebSettings.LOAD_NO_CACHE  // 분석용: 캐시 미사용
             setGeolocationEnabled(false)
             allowFileAccess = false
             allowContentAccess = false
@@ -294,40 +275,12 @@ class MainActivity : AppCompatActivity() {
         analysisWebView.addJavascriptInterface(webFeatureExtractor, "Android")
 
         analysisWebView.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): WebResourceResponse? {
-                request?.let {
-                    val url = it.url.toString()
-                    val headers = it.requestHeaders
-                    val cookieHeader = headers["Cookie"]
-                    
-                    // 🔒 분석 WebView 리소스 격리 검증 로그
-                    Log.d("SANDBOX_ISOLATION", "╔════════════════════════════════════════╗")
-                    Log.d("SANDBOX_ISOLATION", "║ 🔒 분석 WebView 리소스 요청 분석        ║")
-                    Log.d("SANDBOX_ISOLATION", "╠════════════════════════════════════════╣")
-                    Log.d("SANDBOX_ISOLATION", "║ URL = $url")
-                    Log.d("SANDBOX_ISOLATION", "║ Cookie = $cookieHeader")
-                    Log.d("SANDBOX_ISOLATION", "║ 쿠키 상태: ${if (cookieHeader != null) "⚠️ 전송됨 (ERROR!)" else "✅ null - 차단됨"}")
-                    Log.d("SANDBOX_ISOLATION", "║ DOM Storage: ❌ 비활성화됨 (domStorageEnabled=false)")
-                    Log.d("SANDBOX_ISOLATION", "║ 캐시 설정: ❌ LOAD_NO_CACHE 사용 (캐시 차단)")
-                    Log.d("SANDBOX_ISOLATION", "╚════════════════════════════════════════╝")
-                    
-                    if (cookieHeader != null) {
-                        Log.w("SANDBOX_ISOLATION", "⚠️ WARNING: 분석 WebView에서 쿠키 전송 감지!")
-                    }
-                }
-                return super.shouldInterceptRequest(view, request)
-            }
-
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 resultTextView.text = "🔍 웹페이지 분석 중..."
-                
+
                 // 격리 확인 로그: Analysis WebView 페이지 시작
                 logIsolationCheck("ANALYSIS_WEBVIEW_START", url, "분석용 WebView 페이지 로드 시작 (사용자 미표시)")
-                Log.d("SANDBOX_ISOLATION", "📊 ANALYSIS_WEBVIEW_START - URL: $url (쿠키 차단됨)")
 
                 if (!url.isNullOrBlank()) {
                     val prev = lastNavigationUrlForDynamicCounters
@@ -365,54 +318,79 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    //  동적
+    // ✅ assets/dynamic_bot.js 를 "한 번만" 읽어서 캐싱 (페이지 이동마다 IO 방지)
+    private val dynamicBotJs: String by lazy {
+        assets.open("dynamic_bot.js")
+            .bufferedReader()
+            .use { it.readText() }
+    }
 
-    /**
-     * 분석용 WebView 완전 격리 초기화 (3가지 격리 통합)
-     * ✅ 쿠키: 완전 비활성화 + 기존 쿠키 삭제
-     * ✅ DOM Storage: 비활성화
-     * ✅ 캐시: LOAD_NO_CACHE + 기존 캐시 삭제
-     */
-    private fun initSandboxWebView(sandboxWebView: WebView) {
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // 1️⃣ 쿠키 완전 격리 (CookieManager 전역 설정)
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        val cookieManager = CookieManager.getInstance()
-        
-        // 기존 모든 쿠키 삭제
+    private fun setupDynamicWebView() {
+
+        // ✅ UI 격리(실수 방지)
+        // - 사용자 화면에 절대 보이면 안 되니까 처음부터 숨김
+        // - 포커스도 못 받게 해서 클릭/키보드 이벤트가 안 가게 함
+        dynamicWebView.visibility = View.GONE
+        dynamicWebView.isFocusable = false
+        dynamicWebView.isFocusableInTouchMode = false
+
+        // ✅ WebView 디버깅은 Debug 빌드에서만 켜기(릴리즈 빌드 보안/성능)
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
+
+
+        // ✅ 쿠키 정책(격리)
+        // - acceptCookie는 true 유지 (많은 사이트가 쿠키 없으면 로딩/흐름 깨짐)
+        // - 대신 "세션 시작 시 wipe(removeAllCookies + WebStorage.deleteAllData)"로 깨끗하게 시작
+        // - 3rd-party cookie는 off → 추적/광고/외부 쿠키 제한
+        val cm = CookieManager.getInstance()
+        cm.setAcceptCookie(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            cm.setAcceptThirdPartyCookies(dynamicWebView, false)
+        }
+        // ✅ 모듈 생성: Activity는 결과 텍스트 업데이트 콜백만 제공
+        // - setup()/startSession()/stopSession()/release()는 DynamicAnalysis가 담당
+        dynamic = DynamicAnalysis(
+            activity = this,
+            webView = dynamicWebView,
+            botScript = dynamicBotJs,
+            onStatus = { text ->
+                runOnUiThread { resultTextView.text = text }
+            }
+        )
+
+        // ✅ WebView 세팅/브릿지/클라이언트/JS 주입 준비를 모듈에서 수행
+        dynamic.setup()
+    }
+
+
+
+
+        private fun startDynamicSession(targetUrl: String) {
+        // 1) 이전 세션 정리
+        dynamicWebView.apply {
+            stopLoading()
+            clearHistory()
+            clearCache(true)
+            loadUrl("about:blank")
+        }
+
+        // 2) 쿠키/스토리지 삭제 – 샌드박스 느낌
+        val cookieManager = android.webkit.CookieManager.getInstance()
         cookieManager.removeAllCookies(null)
         cookieManager.flush()
-        
-        // 모든 새 쿠키 거부
-        cookieManager.setAcceptCookie(false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            cookieManager.setAcceptThirdPartyCookies(sandboxWebView, false)  // 3rd party 쿠키도 차단
+        android.webkit.WebStorage.getInstance().deleteAllData()
+
+        Log.d("DynamicTest", "🚀 Dynamic-only sandbox start: $targetUrl")
+
+        // 3) URL 로드
+        dynamicWebView.post {
+            dynamicWebView.loadUrl(targetUrl)
         }
-        
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // 2️⃣ DOM Storage 격리
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        with(sandboxWebView.settings) {
-            domStorageEnabled = false           // DOM Storage 비활성화
-            @Suppress("DEPRECATION")
-            databaseEnabled = false             // 데이터베이스 비활성화
-        }
-        
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // 3️⃣ 캐시 완전 격리
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        with(sandboxWebView.settings) {
-            cacheMode = WebSettings.LOAD_NO_CACHE  // 새 캐시 모드 설정
-        }
-        
-        // 기존 캐시 및 히스토리 삭제
-        sandboxWebView.clearCache(true)        // 기존 캐시 삭제
-        sandboxWebView.clearHistory()          // 브라우저 히스토리 삭제
-        
-        Log.d(TAG, "✅ Sandbox WebView 완전 격리 초기화 완료")
-        Log.d(TAG, "   🔒 쿠키: CookieManager.setAcceptCookie(false)")
-        Log.d(TAG, "   🔒 DOM Storage: domStorageEnabled=false")
-        Log.d(TAG, "   🔒 캐시: cacheMode=LOAD_NO_CACHE + clearCache()")
     }
+
 
     private fun launchSandbox(url: String) {
         pendingDetectedUrl = null
@@ -425,40 +403,67 @@ class MainActivity : AppCompatActivity() {
         cameraControls.visibility = View.GONE
         cameraHintText.visibility = View.GONE
         previewView.visibility = View.GONE
-        // 사용자 WebView는 아직 보이지 않음 (분석 완료 후에 보임)
         sandboxInfoPanel.visibility = View.VISIBLE
 
+        // (원래는 analysisWebView 기준이었지만 그냥 놔둬도 됨)
         dynamicTotalRedirects = 0
         dynamicExternalRedirects = 0
         lastNavigationUrlForDynamicCounters = null
 
-        // 격리 확인 로그
-        logIsolationCheck("SANDBOX_START", url, "Analysis WebView만 로드 시작")
+        // 격리 확인 로그 – 메시지도 동적 기준으로 바꿔주면 보기 좋음
+        logIsolationCheck("SANDBOX_START", url, "Static webview애서 정적 분석 시작")
 
-        // 분석용 WebView로 먼저 로드 (사용자는 못 봄)
-        resultTextView.text = "🔍 웹페이지 분석 중..."
+        // 화면 텍스트도 정적 → 동적으로 변경
+        resultTextView.text = "🧪 샌드박스에서 분석 중...\n$url"
+
         analysisWebView.loadUrl(url)
+
+
+//        // 1) 동적 WebView 세션 깨끗하게 초기화
+//
+//        dynamicWebView.apply {
+//
+//            clearHistory()
+//            clearCache(true)
+//            stopLoading()
+//            loadUrl("about:blank")
+//        }
+//        // 2) 쿠키/스토리지 날려서 샌드박스 느낌 내기
+//        val cookieManager = CookieManager.getInstance()
+//        cookieManager.removeAllCookies(null)
+//        cookieManager.flush()
+//        WebStorage.getInstance().deleteAllData()
+//
+//        // 3) 실제 URL을 동적 WebView에 로드
+//        dynamic.start(url, bootstrapMs = 3500L);
+//        """
+//        dynamicWebView.post {
+//            Log.d(TAG, "Dynamic sandbox load: $url") // 이부분 강제 다이나믹 실행
+//            dynamicWebView.loadUrl(url)
+//        }
+//        """
     }
+
 
     private fun returnToCameraView() {
         if (!isWebViewVisible) return
         isWebViewVisible = false
-        
+
         logIsolationCheck("CLEANUP_START", null, "샌드박스 정리 시작")
-        
+
         // 사용자 WebView 정리
         webView.stopLoading()
         webView.loadUrl("about:blank")
         webView.clearCache(true)
         webView.visibility = View.GONE
         logIsolationCheck("USER_WEBVIEW_CLEANED", null, "사용자 WebView 정리 완료")
-        
+
         // 분석 WebView 정리
         analysisWebView.stopLoading()
         analysisWebView.loadUrl("about:blank")
         analysisWebView.clearCache(true)
         logIsolationCheck("ANALYSIS_WEBVIEW_CLEANED", null, "분석 WebView 정리 완료")
-        
+
         previewView.visibility = View.VISIBLE
         sandboxInfoPanel.visibility = View.GONE
         cameraControls.visibility = View.VISIBLE
@@ -624,7 +629,7 @@ class MainActivity : AppCompatActivity() {
     private fun extractWebFeatures() {
         Log.d(TAG, "extractWebFeatures() 호출됨 - URL: $currentUrl")
         isAnalyzingFeatures = true
-        
+
         val script = webFeatureExtractor.getFeatureExtractionScript()
         Log.d(TAG, "JS 스크립트 실행 요청")
         analysisWebView.evaluateJavascript(script) { result ->
@@ -639,14 +644,13 @@ class MainActivity : AppCompatActivity() {
         analysisExecutor.execute {
             try {
                 val merged = features.toMutableMap()
-                
-                // JavaScript의 정적 분석 결과 사용 (동적 카운팅 제거)
-                // nb_redirection과 nb_external_redirection은 이미 JavaScript에서 계산됨
+
+
                 if ((merged["nb_redirection"] ?: 0f) > 0f) {
                     val totalRedirects = (merged["nb_redirection"] ?: 0f).toInt()
                     val externalRedirects = (merged["nb_external_redirection"] ?: 0f).toInt()
                     val internalRedirects = totalRedirects - externalRedirects
-                    
+
                     merged["ratio_intRedirection"] = if (totalRedirects > 0) internalRedirects.toFloat() / totalRedirects else 0f
                     merged["ratio_extRedirection"] = if (totalRedirects > 0) externalRedirects.toFloat() / totalRedirects else 0f
                 } else {
@@ -665,7 +669,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     isAnalyzingFeatures = false
                     lastAnalyzedPageKey = analysisResult.inspectedUrl ?: urlForAnalysis
-                    
+
                     if (analysisResult.isPhishing) {
                         // 피싱 판정: 경고 후 분석 WebView 폐기
                         logIsolationCheck("PHISHING_DETECTED", urlForAnalysis, "Analysis WebView 정리, User WebView 로드 안 함")
@@ -674,9 +678,40 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         // 안전 판정: 사용자 WebView에 로드
                         logIsolationCheck("SAFE_VERDICT", urlForAnalysis, "User WebView 표시 및 로드 시작")
-                        webView.visibility = View.VISIBLE
-                        webView.loadUrl(urlForAnalysis ?: "")
-                        renderAnalysis(analysisResult)
+
+                        //안전일경우 동적분석 시작
+                        val targetUrl = urlForAnalysis ?: ""
+                        // 1. 정적 웹뷰 폐기 (시키는 대로 바로 날림)
+                        logIsolationCheck("STATIC_CLEANUP", targetUrl, "정적 분석 완료 -> Analysis WebView 초기화")
+                        analysisWebView.loadUrl("about:blank")
+
+                        // 2. 동적 분석 실행 (시간 설정 X, 결과 오면 실행할 내용만 전달)
+                        logIsolationCheck("DYNAMIC_START", targetUrl, "동적 분석 시작")
+                        resultTextView.text = "🧪 정적 통과. 동적 분석 중..."
+
+                        dynamic.start(targetUrl) { isSafe ->
+                            runOnUiThread {
+                                if (isSafe) {
+                                    // [안전] -> 사용자 화면 켜기
+                                    logIsolationCheck("DYNAMIC_SAFE", targetUrl, "안전 -> 사용자 뷰 오픈")
+
+                                    webView.visibility = View.VISIBLE
+                                    webView.loadUrl(targetUrl)
+
+                                    resultTextView.text = "✅ 분석 완료. 안전함."
+                                    renderAnalysis(analysisResult, allowModal = false)
+                                } else {
+                                    // [위험] -> 차단
+                                    logIsolationCheck("DYNAMIC_FAIL", targetUrl, "위험 -> 차단")
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "차단되었습니다.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    dynamicWebView.loadUrl("about:blank")
+                                }
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -688,6 +723,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+
+
 
     private fun computeStatisticalReport(url: String?): Float? {
         if (url.isNullOrBlank()) return null
@@ -819,6 +857,7 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
+
     /**
      * 두 WebView의 격리 상태를 로깅하는 함수
      * 분석용 WebView와 사용자 WebView가 완벽히 격리되어 있는지 확인
@@ -829,7 +868,7 @@ class MainActivity : AppCompatActivity() {
         val analysisWebViewVisible = analysisWebView.visibility == View.VISIBLE
         val userWebViewLoaded = isUserWebViewLoaded
         val isAnalyzing = isAnalyzingFeatures
-        
+
         val isolationStatus = StringBuilder().apply {
             append("\n")
             append("╔════════════════════════════════════════════════════════╗\n")
@@ -858,11 +897,11 @@ class MainActivity : AppCompatActivity() {
             append("║  └─ 현재 URL: ${currentUrl ?: "N/A"}\n")
             append("║\n")
             append("║ [격리 검증]\n")
-            
+
             // 격리 상태 검증
-            val isolationValid = !analysisWebViewVisible && 
+            val isolationValid = !analysisWebViewVisible &&
                                  (userWebViewVisible || !isWebViewVisible)
-            
+
             if (isolationValid) {
                 append("║  ✅ 두 WebView가 완벽히 격리됨!\n")
             } else {
@@ -871,12 +910,12 @@ class MainActivity : AppCompatActivity() {
                     append("║     └─ ERROR: 분석 WebView가 보임\n")
                 }
             }
-            
+
             append("╚════════════════════════════════════════════════════════╝\n")
         }
-        
+
         Log.d(TAG, isolationStatus.toString())
-        
+
         // Logcat에서 쉽게 찾을 수 있도록 분리된 로그도 추가
         Log.i("ISOLATION_CHECK", "$event | UserWebView: ${if (userWebViewVisible) "VISIBLE" else "GONE"} | AnalysisWebView: ${if (analysisWebViewVisible) "VISIBLE" else "GONE"} | Analyzing: ${if (isAnalyzing) "YES" else "NO"}")
     }
@@ -885,7 +924,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.google.com/" // 여기 url 하드코딩
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://nid.naver.com/nidlogin.login" // 여기 url 하드코딩
         private val STATISTICAL_REPORT_DOMAINS = setOf(
             "trusted-reporting.edgekey.net",
             "fundingchoicesmessages.google.com"
@@ -897,7 +936,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeLaunchDebugUrl() {
-        // Launch after a short delay to ensure UI is responsive
+        // UI가 완전히 준비된 후 실행하기 위해 1초(1000ms) 지연 실행
         findViewById<View>(android.R.id.content).postDelayed({
             if (DEBUG_AUTO_LAUNCH_URL.isNotBlank()) {
                 cameraHintText.text = "디버그 URL 자동 분석 중..."
@@ -905,4 +944,9 @@ class MainActivity : AppCompatActivity() {
             }
         }, 1000)
     }
-}
+
+
+
+
+
+    }
