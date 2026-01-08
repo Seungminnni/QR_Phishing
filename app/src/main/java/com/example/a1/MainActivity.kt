@@ -658,12 +658,13 @@ class MainActivity : AppCompatActivity() {
                     merged["ratio_extRedirection"] = 0f
                 }
 
-                val statValue = computeStatisticalReport(urlForAnalysis)
-                if (statValue != null) {
-                    merged["statistical_report"] = statValue
+                // ✅ statistical_report는 WebFeatureExtractor에서 이미 계산됨 (외부 조회 없음)
+                // ✅ 따라서 여기서 덮어씌우지 않음 - 패턴 매칭 기반 값 유지
+                if (!merged.containsKey("statistical_report")) {
+                    merged["statistical_report"] = 0f  // 예외: 계산되지 않은 경우만 기본값
                 }
 
-                Log.d(TAG, "static features - nb_redirection=${merged["nb_redirection"]}, nb_external_redirection=${merged["nb_external_redirection"]}")
+                Log.d(TAG, "static features - nb_redirection=${merged["nb_redirection"]}, nb_external_redirection=${merged["nb_external_redirection"]}, statistical_report=${merged["statistical_report"]}")
 
                 val analysisResult = phishingDetector.analyzePhishing(merged, urlForAnalysis)
                 runOnUiThread {
@@ -726,25 +727,6 @@ class MainActivity : AppCompatActivity() {
 
 
 
-
-    private fun computeStatisticalReport(url: String?): Float? {
-        if (url.isNullOrBlank()) return null
-
-        val lowerUrl = url.lowercase(Locale.ROOT)
-        if (STATISTICAL_REPORT_DOMAINS.any { lowerUrl.contains(it) }) {
-            return 1f
-        }
-
-        val host = runCatching { URI(url).host }.getOrNull() ?: return 2f
-        val normalizedHost = host.trim().trimStart('[').trimEnd(']')
-        return try {
-            val ip = InetAddress.getByName(normalizedHost).hostAddress ?: return 2f
-            if (STATISTICAL_REPORT_IPS.contains(ip)) 1f else 0f
-        } catch (e: Exception) {
-            Log.d(TAG, "statistical_report DNS lookup 실패: $normalizedHost", e)
-            2f
-        }
-    }
 
     private fun renderAnalysis(analysisResult: PhishingAnalysisResult, allowModal: Boolean = true) {
         val modeDescription = "ML 기반 통합 분석"
@@ -924,15 +906,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://nid.naver.com/nidlogin.login" // 여기 url 하드코딩
-        private val STATISTICAL_REPORT_DOMAINS = setOf(
-            "trusted-reporting.edgekey.net",
-            "fundingchoicesmessages.google.com"
-        )
-        private val STATISTICAL_REPORT_IPS = setOf(
-            // Example IPs known for stats reporting
-            "104.18.3.111"
-        )
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://namu.wiki/" // 여기 url 하드코딩
     }
 
     private fun maybeLaunchDebugUrl() {
