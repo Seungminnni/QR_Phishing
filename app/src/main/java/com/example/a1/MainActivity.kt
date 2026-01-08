@@ -248,12 +248,18 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // ========================================
+        // 정적 분석 WebView 설정
+        // ========================================
+        // 용도: HTML 파싱 + 피처 추출만 (Javascript 제약)
+        // 격리: Cookie 완전 차단 + DOM Storage 비활성화
+        // 목표: 순수한 HTML 분석, 외부 영향 없음
         with(analysisWebView.settings) {
-            javaScriptEnabled = true  // 분석용: JavaScript 필요
-            domStorageEnabled = true
+            javaScriptEnabled = true  // 피처 추출을 위해 필요
+            domStorageEnabled = false  // ✅ DOM Storage 비활성화 (순수 분석)
             @Suppress("DEPRECATION")
             databaseEnabled = false
-            cacheMode = WebSettings.LOAD_NO_CACHE  // 분석용: 캐시 미사용
+            cacheMode = WebSettings.LOAD_NO_CACHE  // 캐시 미사용
             setGeolocationEnabled(false)
             allowFileAccess = false
             allowContentAccess = false
@@ -268,6 +274,12 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
             loadWithOverviewMode = true
             safeBrowsingEnabled = true
+        }
+
+        // ✅ 정적 분석 WebView의 쿠키 완전 차단
+        CookieManager.getInstance().apply {
+            removeAllCookies(null)  // 기존 쿠키 삭제
+            setAcceptCookie(false)  // 새 쿠키 거부
         }
 
         WebView.setWebContentsDebuggingEnabled(true)
@@ -318,8 +330,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    //  동적
-    // ✅ assets/dynamic_bot.js 를 "한 번만" 읽어서 캐싱 (페이지 이동마다 IO 방지)
+
+    // ========================================
+    // 동적 분석 WebView 캐싱 및 초기화
+    // ========================================
+    // assets/dynamic_bot.js 를 "한 번만" 읽어서 캐싱 (페이지 이동마다 IO 방지)
     private val dynamicBotJs: String by lazy {
         assets.open("dynamic_bot.js")
             .bufferedReader()
@@ -327,6 +342,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupDynamicWebView() {
+        // ========================================
+        // 동적 분석 WebView 설정
+        // ========================================
+        // 용도: JavaScript 봇 실행 + 자동 폼 제출 + 리다이렉트 감지
+        // 격리: Cookie/DOM Storage 활성 + 매번 완전 정리(wipe)
+        // 목표: 봇이 자유롭게 DOM 조작, 매번 깨끗한 상태 시작
 
         // ✅ UI 격리(실수 방지)
         // - 사용자 화면에 절대 보이면 안 되니까 처음부터 숨김
@@ -340,18 +361,18 @@ class MainActivity : AppCompatActivity() {
             WebView.setWebContentsDebuggingEnabled(true)
         }
 
-
-        // ✅ 쿠키 정책(격리)
-        // - acceptCookie는 true 유지 (많은 사이트가 쿠키 없으면 로딩/흐름 깨짐)
-        // - 대신 "세션 시작 시 wipe(removeAllCookies + WebStorage.deleteAllData)"로 깨끗하게 시작
-        // - 3rd-party cookie는 off → 추적/광고/외부 쿠키 제한
+        // ✅ 쿠키 정책 (봇이 필요하므로 활성화)
+        // - acceptCookie: true (봇이 폼 제출할 때 쿠키 필요)
+        // - 대신 dynamic.start()에서 매번 removeAllCookies() + deleteAllData()로 정리
+        // - 3rd-party cookie: false (추적 쿠키 제한)
         val cm = CookieManager.getInstance()
-        cm.setAcceptCookie(true)
+        cm.setAcceptCookie(true)  // 봇이 필요
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            cm.setAcceptThirdPartyCookies(dynamicWebView, false)
+            cm.setAcceptThirdPartyCookies(dynamicWebView, false)  // 추적 차단
         }
-        // ✅ 모듈 생성: Activity는 결과 텍스트 업데이트 콜백만 제공
-        // - setup()/startSession()/stopSession()/release()는 DynamicAnalysis가 담당
+
+        // ✅ 모듈 생성: Activity는 결과 콜백만 제공
+        // - setup()/start()/stop()은 DynamicAnalysis가 담당
         dynamic = DynamicAnalysis(
             activity = this,
             webView = dynamicWebView,
@@ -361,7 +382,8 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
-        // ✅ WebView 세팅/브릿지/클라이언트/JS 주입 준비를 모듈에서 수행
+        // DynamicAnalysis가 WebView 설정/브릿지/클라이언트/JS 주입 처리
+        // (DynamicAnalysis.setup()에서 domStorageEnabled=true로 설정함)
         dynamic.setup()
     }
 
@@ -906,7 +928,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://namu.wiki/" // 여기 url 하드코딩
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://m.naver.com/" // 여기 url 하드코딩
     }
 
     private fun maybeLaunchDebugUrl() {
