@@ -559,15 +559,14 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     }
                 };
                 
-                // 페이지 완전 로드 대기
+                // 페이지 완전 로드 후 즉시 실행 (1000ms 대기 제거)
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', function() {
-                        // AJAX 동적 로딩 완료 대기 (1000ms)
-                        setTimeout(executeExtraction, 1000);
+                        executeExtraction();
                     });
                 } else if (document.readyState === 'interactive' || document.readyState === 'complete') {
-                    // 이미 로드됨 - AJAX 로딩 완료 대기 (1000ms)
-                    setTimeout(executeExtraction, 1000);
+                    // 이미 로드됨 - 즉시 실행
+                    executeExtraction();
                 }
             })();
         """.trimIndent()
