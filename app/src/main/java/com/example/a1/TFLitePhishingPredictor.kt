@@ -89,6 +89,15 @@ class TFLitePhishingPredictor(private val context: Context) {
     /**
      * TFLite 모델로 피싱 확률 예측
      * 
+     * ⭐ 모델 출력 해석 (CRITICAL):
+     * - 학습 데이터: status (0=Legitimate(정상), 1=Phishing(피싱))
+     * - 모델: sigmoid 활성화 → output = P(Phishing) 확률
+     * - 의미: 0.0 = 정상, 1.0 = 피싱
+     * 
+     * 사용 방법:
+     * - output >= 0.55 → 피싱 판정
+     * - output < 0.55 → 정상 판정
+     * 
      * @param features RobustScaler로 전처리된 71개 특성 배열 [71]
      * @return 피싱 확률 (0.0~1.0), 실패 시 -1.0
      */

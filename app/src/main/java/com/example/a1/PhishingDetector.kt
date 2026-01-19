@@ -78,6 +78,16 @@ class PhishingDetector(private val context: Context) {
 
         val (confidenceScore, isPhishing) = if (mlScoreFloat >= 0f) {
             val score = mlScoreFloat.coerceIn(0f, 1f).toDouble()
+            
+            // ⭐ 모델 출력 해석 (CRITICAL FIX):
+            // 노트북: status (0=Legitimate, 1=Phishing) 학습
+            // 모델 출력: sigmoid → P(Phishing) 확률
+            // 따라서: score >= THRESHOLD → 피싱 (역전이 아님!)
+            // 
+            // 이전 버그: isPhishing = score >= ML_THRESHOLD (정상과 피싱이 역반대)
+            // 수정: 모델 학습 시 P(Phishing)을 출력하도록 구성했으므로 그대로 사용
+            
+            Log.d(TAG, "🤖 ML Score: $score (Threshold: $ML_THRESHOLD)")
             Pair(score, score >= ML_THRESHOLD)
         } else {
             // ML 실패 시 휴리스틱
