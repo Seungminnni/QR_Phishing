@@ -130,9 +130,9 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
         }
     }
 
-    fun getFeatureExtractionScript(): String {
-        // The very large JS string is kept here intentionally — it mirrors the
-        // Python feature extraction logic exactly (including the same heuristics)
+    fun getFeatureExtractionScript(requestedUrl: String = ""): String {
+        // ✅ 원본 URL을 매개변수로 받아서 JavaScript에 주입
+        // window.location.href 대신 전달받은 URL 사용 (WebView 리다이렉트/에러 영향 없음)
         return """
             javascript:(function() {
                 // 페이지 완전 로드 대기 (동적 로딩 요소 포함)
@@ -146,14 +146,30 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                             }
                         }
 
-                    var url = window.location.href;
+                    // ✅ 원본 URL 사용 (요청된 URL이 있으면 그것, 없으면 현재 페이지 URL)
+                    var url = "$requestedUrl" || window.location.href;
                     // 끝의 슬래시 제거 (정규화)
                     if (url.endsWith('/') && url.lastIndexOf('/') > 8) {  // protocol:// 다음의 /는 유지
                         url = url.slice(0, -1);
                     }
-                    var hostname = window.location.hostname;
+
+                    // ✅ hostname과 pathname을 URL 파싱으로 추출 (window.location이 아님!)
+                    var hostname = '';
+                    var pathname = '';
+                    try {
+                        var urlObj = new URL(url);
+                        hostname = urlObj.hostname || '';
+                        pathname = urlObj.pathname || '';
+                    } catch (e) {
+                        // URL 파싱 실패 시 정규식으로 추출
+                        var hostMatch = url.match(/^https?:\/\/([^\/\?#]+)/);
+                        hostname = hostMatch ? hostMatch[1] : '';
+                        var pathMatch = url.match(/^https?:\/\/[^\/]*(\/?[^\?#]*)/);
+                        pathname = pathMatch ? pathMatch[1] : '';
+                    }
+
                     var hostLower = hostname.toLowerCase();
-                    var pathLower = window.location.pathname.toLowerCase();
+                    var pathLower = pathname.toLowerCase();
                     var hostParts = hostLower.split('.');
                     var subdomainPart = hostParts.length > 2 ? hostParts.slice(0, hostParts.length - 2).join('.') : '';
                     var domainLabel = hostParts.length > 1 ? hostParts[hostParts.length - 2] : hostLower;
@@ -175,8 +191,16 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     var w_subdomain = subdomainPart.split(splitRegex).filter(function(w){ return w && w.length > 0; });
                     
                     // path만 분리 (TLD 이후 부분, "/" 포함)
+                    // ✅ window.location이 아닌 파싱된 pathname + search 사용
                     // Python: pth[2] = "/" 다음의 경로 부분
-                    var pathAfterTld = window.location.pathname + window.location.search;
+                    var search = '';
+                    try {
+                        search = new URL(url).search || '';
+                    } catch (e) {
+                        var searchMatch = url.match(/\?[^\#]*/);
+                        search = searchMatch ? searchMatch[0] : '';
+                    }
+                    var pathAfterTld = pathname + search;
                     var w_path = pathAfterTld.split(splitRegex).filter(function(w){ return w && w.length > 0; });
                     
                     // Python: raw_words = w_domain + w_path + w_subdomain (이 순서!)
@@ -196,7 +220,14 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
 
                     features.length_url = url.length;
                     features.length_hostname = hostname.length;
-                    features.ip = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) ? 1 : 0;
+                    // ✅ Python having_ip_address() 정규식과 동일하게 수정
+                    // IPv4 with /, Hex IPv4 with /, IPv6, 7-digit hex 모두 감지
+                    features.ip = (
+                        /(\d{1,3}\.){3}\d{1,3}\//.test(url) ||  // IPv4 with /
+                        /(0x[0-9a-fA-F]{1,2})\.(0x[0-9a-fA-F]{1,2})\.(0x[0-9a-fA-F]{1,2})\.(0x[0-9a-fA-F]{1,2})\//.test(url) ||  // Hex IPv4 with /
+                        /([a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}/.test(url) ||  // IPv6
+                        /[0-9a-fA-F]{7}/.test(url)  // 7-digit hex
+                    ) ? 1 : 0;
                     features.nb_dots = (url.match(/\./g) || []).length;
                     features.nb_hyphens = (url.match(/-/g) || []).length;
                     features.nb_at = (url.match(/@/g) || []).length;

@@ -71,7 +71,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webFeatureExtractor: WebFeatureExtractor
     private lateinit var analysisExecutor: ExecutorService
 
-    private var currentUrl: String? = null
+    private var requestedUrl: String? = null  // QR/사용자가 요청한 원본 URL (변경 금지)
+    private var currentUrl: String? = null  // 실제로 로드된 URL (WebView 리다이렉트/에러 포함)
     private var isUserWebViewLoaded = false  // 사용자 WebView 로드 상태
     private var dynamicTotalRedirects: Int = 0
     private var dynamicExternalRedirects: Int = 0
@@ -417,7 +418,8 @@ class MainActivity : AppCompatActivity() {
     private fun launchSandbox(url: String) {
         pendingDetectedUrl = null
         isWebViewVisible = true
-        currentUrl = url
+        requestedUrl = url  // ✅ 원본 URL 저장 (이후 변경 금지)
+        currentUrl = url    // 초기값은 동일하지만, WebView 리다이렉트/에러 시 업데이트됨
         lastAnalyzedPageKey = null
         isAnalyzingFeatures = false
         isUserWebViewLoaded = false
@@ -494,6 +496,8 @@ class MainActivity : AppCompatActivity() {
         lastAnalyzedPageKey = null
         isAnalyzingFeatures = false
         isUserWebViewLoaded = false
+        requestedUrl = null  // ✅ 원본 URL 정리
+        currentUrl = null
     }
 
     private fun startCamera() {
@@ -649,11 +653,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun extractWebFeatures() {
-        Log.d(TAG, "extractWebFeatures() 호출됨 - URL: $currentUrl")
+        Log.d(TAG, "extractWebFeatures() 호출됨 - 요청URL: $requestedUrl, 실제URL: $currentUrl")
         isAnalyzingFeatures = true
 
-        val script = webFeatureExtractor.getFeatureExtractionScript()
-        Log.d(TAG, "JS 스크립트 실행 요청")
+        // ✅ 원본 URL을 JavaScript로 전달 (WebView 리다이렉트/에러 영향 없음)
+        val script = webFeatureExtractor.getFeatureExtractionScript(requestedUrl ?: currentUrl ?: "")
+        Log.d(TAG, "JS 스크립트 실행 요청 - URL: ${requestedUrl ?: currentUrl}")
         analysisWebView.evaluateJavascript(script) { result ->
             Log.d(TAG, "evaluateJavascript 완료, result=$result")
         }
@@ -661,7 +666,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun analyzeAndDisplayPhishingResult(features: WebFeatures) {
         Log.d(TAG, "analyzeAndDisplayPhishingResult() 호출됨, 피처 수: ${features.size}")
-        val urlForAnalysis = currentUrl
+        // ✅ 분석용 URL은 원본 URL (requestedUrl) 사용
+        val urlForAnalysis = requestedUrl ?: currentUrl
 
         analysisExecutor.execute {
             try {
