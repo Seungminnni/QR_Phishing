@@ -236,7 +236,7 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     features.nb_or = (url.match(/\|/g) || []).length;
                     features.nb_eq = (url.match(/=/g) || []).length;
                     features.nb_underscore = (url.match(/_/g) || []).length;
-                    features.nb_tilde = (url.match(/~/g) || []).length;
+                    features.nb_tilde = (url.match(/~/g) || []).length > 0 ? 1 : 0;
                     features.nb_percent = (url.match(/%/g) || []).length;
                     features.nb_slash = (url.match(/\//g) || []).length;
                     features.nb_star = (url.match(/\*/g) || []).length;
@@ -297,7 +297,7 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     var shortenerHosts = ['bit.ly','tinyurl.com','t.co','goo.gl','ow.ly','is.gd','s.id','rebrand.ly','buff.ly','cutt.ly','lnkd.in'];
                     features.shortening_service = shortenerHosts.includes(hostLower) ? 1 : 0;
 
-                    features.path_extension = window.location.pathname.endsWith('.txt') ? 1 : 0;
+                    features.path_extension = pathname.endsWith('.txt') ? 1 : 0;
 
                     // 정적 분석: 현재 페이지 내 모든 링크에서 리다이렉트 여부 검사
                     // Python과 동일: requests.get(link)에서 r.history 확인과 유사
@@ -561,9 +561,9 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     features.empty_title = (!document.title || document.title.trim() === '') ? 1 : 0;
                     console.log('DEBUG: document.title = "' + document.title + '", empty_title = ' + features.empty_title);
 
-                    // domain_in_title: 1 if domain is in title, 0 otherwise
+                    // domain_in_title: 0 if domain is in title, 1 otherwise (Python: domain in title returns 0)
                     var titleLower = (document.title || '').toLowerCase();
-                    features.domain_in_title = (titleLower.indexOf(domainLabel) !== -1) ? 1 : 0;
+                    features.domain_in_title = (titleLower.indexOf(domainLabel) !== -1) ? 0 : 1;
                     console.log('DEBUG: domainLabel = "' + domainLabel + '", titleLower = "' + titleLower + '", domain_in_title = ' + features.domain_in_title);
 
                     // domain_with_copyright: Check if domain appears near copyright symbol
