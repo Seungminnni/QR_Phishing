@@ -294,7 +294,16 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     features.prefix_suffix = /https?:\/\/[^\-]+\-[^\-]+\//.test(url) ? 1 : 0;
                     features.random_domain = (domainLabel && domainLabel.length >= 5 && (domainLabel.replace(/[aeiou]/gi,'').length / domainLabel.length) > 0.6) ? 1 : 0;
 
-                    var shortenerHosts = ['bit.ly','tinyurl.com','t.co','goo.gl','ow.ly','is.gd','s.id','rebrand.ly','buff.ly','cutt.ly','lnkd.in'];
+                    var shortenerHosts = [
+                        'adf.ly', 'bc.vc', 'bit.do', 'bit.ly', 'bitly.com', 'bkite.com', 'buff.ly', 'buzurl.com',
+                        'cli.gs', 'cutt.ly', 'cutt.us', 'cur.lv', 'db.tt', 'doiop.com', 'fic.kr', 'filoops.info',
+                        'ff.im', 'go2l.ink', 'goo.gl', 'ity.im', 'j.mp', 'just.as', 'kl.am', 'link.zip.net',
+                        'loopt.us', 'migre.me', 'om.ly', 'ow.ly', 'ping.fm', 'po.st', 'post.ly', 'prettylinkpro.com',
+                        'q.gs', 'qr.ae', 'qr.net', 'rebrand.ly', 'rubyurl.com', 's.id', 'scrnch.me', 'short.ie',
+                        'short.to', 'shorte.st', 'snipurl.com', 'snipr.com', 'su.pr', 't.co', 'tiny.cc', 'tinyurl.com',
+                        'to.ly', 'tr.im', 'twit.ac', 'twitthis.com', 'twurl.nl', 'u.bb', 'u.to', 'url4.eu',
+                        'vzturl.com', 'v.gd', 'wp.me', 'x.co', 'yourls.org', 'yfrog.com'
+                    ];
                     features.shortening_service = shortenerHosts.includes(hostLower) ? 1 : 0;
 
                     features.path_extension = pathname.endsWith('.txt') ? 1 : 0;
