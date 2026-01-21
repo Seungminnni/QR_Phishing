@@ -34,7 +34,6 @@
     "abnormal_subdomain",
     "nb_subdomains",
     "prefix_suffix",
-    "random_domain",
     "shortening_service",
     "path_extension",
     "nb_redirection",
@@ -73,7 +72,7 @@
     "domain_with_copyright"
   ],
   "input_shape": [
-    71
+    70
   ],
   "normalization_layer": "norm_all",
   "labeling": "both",

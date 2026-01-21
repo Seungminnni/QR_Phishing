@@ -292,7 +292,7 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     }
 
                     features.prefix_suffix = /https?:\/\/[^\-]+\-[^\-]+\//.test(url) ? 1 : 0;
-                    features.random_domain = (domainLabel && domainLabel.length >= 5 && (domainLabel.replace(/[aeiou]/gi,'').length / domainLabel.length) > 0.6) ? 1 : 0;
+                    // random_domain 피처 제거됨 (NLP 모델 불일치로 인해 모델 재학습 시 제외)
 
                     var shortenerHosts = [
                         'adf.ly', 'bc.vc', 'bit.do', 'bit.ly', 'bitly.com', 'bkite.com', 'buff.ly', 'buzurl.com',
