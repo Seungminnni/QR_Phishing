@@ -271,7 +271,9 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     }
 
                     features.http_in_path = pathLower.includes('http') ? 1 : 0;
-                    features.https_token = window.location.protocol === 'https:' ? 0 : 1;
+                    // ✅ 수정: URL 파싱으로 변경 (Python: urlparse(url).scheme 사용)
+                    // window.location 사용 시 WebView 로드 실패하면 잘못된 값 반환
+                    features.https_token = url.startsWith('https://') ? 0 : 1;
                     features.ratio_digits_url = (url.match(/\d/g) || []).length / Math.max(url.length, 1);
                     features.ratio_digits_host = (hostname.match(/\d/g) || []).length / Math.max(hostname.length, 1);
                     features.punycode = (url.startsWith('http://xn--') || url.startsWith('https://xn--')) ? 1 : 0;
