@@ -228,7 +228,8 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                         /([a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}/.test(url) ||  // IPv6
                         /[0-9a-fA-F]{7}/.test(url)  // 7-digit hex
                     ) ? 1 : 0;
-                    features.nb_dots = (url.match(/\./g) || []).length;
+                    // ✅ Python과 동일: hostname에서 dot 개수 (url 아님!)
+                    features.nb_dots = (hostname.match(/\./g) || []).length;
                     features.nb_hyphens = (url.match(/-/g) || []).length;
                     features.nb_at = (url.match(/@/g) || []).length;
                     features.nb_qm = (url.match(/\?/g) || []).length;
@@ -270,7 +271,8 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                         features.nb_dslash = 0;
                     }
 
-                    features.http_in_path = pathLower.includes('http') ? 1 : 0;
+                    // ✅ Python과 동일: path.count('http') - 개수 반환
+                    features.http_in_path = (pathLower.match(/http/g) || []).length;
                     // ✅ 수정: URL 파싱으로 변경 (Python: urlparse(url).scheme 사용)
                     // window.location 사용 시 WebView 로드 실패하면 잘못된 값 반환
                     features.https_token = url.startsWith('https://') ? 0 : 1;
@@ -294,6 +296,7 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     features.prefix_suffix = /https?:\/\/[^\-]+\-[^\-]+\//.test(url) ? 1 : 0;
                     // random_domain 피처 제거됨 (NLP 모델 불일치로 인해 모델 재학습 시 제외)
 
+                    // Python shortening_service 정규식의 모든 도메인 포함
                     var shortenerHosts = [
                         'adf.ly', 'bc.vc', 'bit.do', 'bit.ly', 'bitly.com', 'bkite.com', 'buff.ly', 'buzurl.com',
                         'cli.gs', 'cutt.ly', 'cutt.us', 'cur.lv', 'db.tt', 'doiop.com', 'fic.kr', 'filoops.info',
@@ -302,59 +305,13 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                         'q.gs', 'qr.ae', 'qr.net', 'rebrand.ly', 'rubyurl.com', 's.id', 'scrnch.me', 'short.ie',
                         'short.to', 'shorte.st', 'snipurl.com', 'snipr.com', 'su.pr', 't.co', 'tiny.cc', 'tinyurl.com',
                         'to.ly', 'tr.im', 'twit.ac', 'twitthis.com', 'twurl.nl', 'u.bb', 'u.to', 'url4.eu',
-                        'vzturl.com', 'v.gd', 'wp.me', 'x.co', 'yourls.org', 'yfrog.com'
+                        'vzturl.com', 'v.gd', 'wp.me', 'x.co', 'yourls.org', 'yfrog.com',
+                        // Python에만 있던 누락 도메인 추가
+                        'is.gd', 'tweez.me', '1url.com', 'budurl.com', 'lnkd.in', 'tinyurl'
                     ];
                     features.shortening_service = shortenerHosts.includes(hostLower) ? 1 : 0;
 
                     features.path_extension = pathname.endsWith('.txt') ? 1 : 0;
-
-                    // 정적 분석: 현재 페이지 내 모든 링크에서 리다이렉트 여부 검사
-                    // Python과 동일: requests.get(link)에서 r.history 확인과 유사
-                    var internalRedirectCount = 0;
-                    var externalRedirectCount = 0;
-                    var currentHost = window.location.hostname.toLowerCase();
-                    
-                    // 페이지 내 모든 링크 수집
-                    var allLinks = [];
-                    var anchors = document.getElementsByTagName('a');
-                    for (var ai = 0; ai < anchors.length; ai++) {
-                        var href = anchors[ai].getAttribute('href');
-                        if (href && (href.startsWith('http') || href.startsWith('/'))) {
-                            allLinks.push(href);
-                        }
-                    }
-                    
-                    // 각 링크의 리다이렉트 여부 판단 (간단한 휴리스틱)
-                    // 실제 HTTP 요청 없이, 링크의 특성으로 예상
-                    for (var li = 0; li < allLinks.length; li++) {
-                        var link = allLinks[li];
-                        try {
-                            var linkUrl = new URL(link, window.location.href);
-                            var linkHost = linkUrl.hostname.toLowerCase();
-                            
-                            // URL 단축 서비스는 거의 항상 리다이렉트
-                            if (link.match(/^https?:\/\/(bit\.ly|tinyurl\.com|goo\.gl|ow\.ly|short\.|v\.gd)/i)) {
-                                if (linkHost !== currentHost) {
-                                    externalRedirectCount++;
-                                } else {
-                                    internalRedirectCount++;
-                                }
-                            }
-                            // URL 쿼리 파라미터에 리다이렉트 URL이 있으면 리다이렉트 가능성
-                            else if (link.match(/[?&](url=|redirect=|return=|goto=|go=)/i)) {
-                                if (linkHost !== currentHost) {
-                                    externalRedirectCount++;
-                                } else {
-                                    internalRedirectCount++;
-                                }
-                            }
-                        } catch (e) {
-                            // 잘못된 URL은 무시
-                        }
-                    }
-                    
-                    features.nb_redirection = internalRedirectCount + externalRedirectCount;
-                    features.nb_external_redirection = externalRedirectCount;
                     features.length_words_raw = urlWords.length;
 
                     function countCharRepeat(words) {
@@ -403,35 +360,70 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     }
                     features.phish_hints = phishHintCount;
 
-                    // Brand keywords list - matching Python's allbrands.txt common entries
-                    var brandKeywords = ['paypal','naver','apple','bank','google','microsoft','kakao','facebook','instagram','amazon','ebay','netflix','samsung','yahoo','linkedin','twitter','chase','wellsfargo','citibank','americanexpress','discover','capitalone','usbank','pnc','dropbox','icloud','outlook','office365','adobe','spotify','steam','epic','nintendo','playstation','xbox'];
+                    // Brand keywords list - Python's allbrands.txt 전체 목록 (257개)
+                    var brandKeywords = [
+                        'accenture','activisionblizzard','adidas','adobe','adultfriendfinder','agriculturalbankofchina',
+                        'akamai','alibaba','aliexpress','alipay','alliance','alliancedata','allianceone','allianz',
+                        'alphabet','amazon','americanairlines','americanexpress','americantower','andersons','apache',
+                        'apple','arrow','ashleymadison','audi','autodesk','avaya','avisbudget','avon','axa','badoo',
+                        'baidu','bankofamerica','bankofchina','bankofnewyorkmellon','barclays','barnes','bbc','bbt',
+                        'bbva','bebo','benchmark','bestbuy','bim','bing','biogen','blackstone','blogger','blogspot',
+                        'bmw','bnpparibas','boeing','booking','broadcom','burberry','caesars','canon','cardinalhealth',
+                        'carmax','carters','caterpillar','cheesecakefactory','chinaconstructionbank','cinemark','cintas',
+                        'cisco','citi','citigroup','cnet','coca-cola','colgate','colgate-palmolive','columbiasportswear',
+                        'commonwealth','communityhealth','continental','dell','deltaairlines','deutschebank','disney',
+                        'dolby','dominos','donaldson','dreamworks','dropbox','eastman','eastmankodak','ebay','edison',
+                        'electronicarts','equifax','equinix','expedia','express','facebook','fedex','flickr','footlocker',
+                        'ford','fordmotor','fossil','fosterwheeler','foxconn','fujitsu','gap','gartner','genesis',
+                        'genuine','genworth','gigamedia','gillette','github','global','globalpayments','goodyeartire',
+                        'google','gucci','harley-davidson','harris','hewlettpackard','hilton','hiltonworldwide','hmstatil',
+                        'honda','hsbc','huawei','huntingtonbancshares','hyundai','ibm','ikea','imdb','imgur','ingbank',
+                        'insight','instagram','intel','jackdaniels','jnj','jpmorgan','jpmorganchase','kelly','kfc',
+                        'kindermorgan','lbrands','lego','lennox','lenovo','lindsay','linkedin','livejasmin','loreal',
+                        'louisvuitton','mastercard','mcdonalds','mckesson','mckinsey','mercedes-benz','microsoft',
+                        'microsoftonline','mini','mitsubishi','morganstanley','motorola','mrcglobal','mtv','myspace',
+                        'nescafe','nestle','netflix','nike','nintendo','nissan','nissanmotor','nvidia','nytimes',
+                        'oracle','panasonic','paypal','pepsi','pepsico','philips','pinterest','pocket','pornhub',
+                        'porsche','prada','rabobank','reddit','regal','royalbankofcanada','samsung','scotiabank',
+                        'shell','siemens','skype','snapchat','sony','soundcloud','spiritairlines','spotify','sprite',
+                        'stackexchange','stackoverflow','starbucks','swatch','swift','symantec','synaptics','target',
+                        'telegram','tesla','teslamotors','theguardian','homedepot','piratebay','tiffany','tinder',
+                        'tmall','toyota','tripadvisor','tumblr','twitch','twitter','underarmour','unilever','universal',
+                        'ups','verizon','viber','visa','volkswagen','volvocars','walmart','wechat','weibo','whatsapp',
+                        'wikipedia','wordpress','yahoo','yamaha','yandex','youtube','zara','zebra','iphone','icloud',
+                        'itunes','sinara','normshield','bga','sinaralabs','roksit','cybrml','turkcell','n11',
+                        'hepsiburada','migros'
+                    ];
                     
                     // domain_in_brand: Check if the main domain label is a brand name
                     features.domain_in_brand = brandKeywords.includes(domainLabel.toLowerCase()) ? 1 : 0;
 
-                    // brand_in_subdomain: Check if any brand appears in subdomain but NOT in the domain itself
-                    // Python: if '.'+b+'.' in path and b not in domain
+                    // brand_in_subdomain: Check if '.'+brand+'.' pattern exists in subdomain but NOT in the domain itself
+                    // Python: if '.'+b+'.' in subdomain and b not in domain
                     features.brand_in_subdomain = 0;
+                    var subdomainWithDots = '.' + subdomainPart.toLowerCase() + '.';
                     for (var b = 0; b < brandKeywords.length; b++) {
                         var brand = brandKeywords[b];
-                        if (subdomainPart.toLowerCase().indexOf(brand) !== -1 && domainLabel.toLowerCase() !== brand) {
+                        if (subdomainWithDots.indexOf('.' + brand + '.') !== -1 && domainLabel.toLowerCase() !== brand) {
                             features.brand_in_subdomain = 1;
                             break;
                         }
                     }
 
-                    // brand_in_path: Check if any brand appears in path but NOT in the domain itself  
-                    // Python: if '.'+b+'.' in path and b not in domain (actually checks subdomain arg which is path)
+                    // brand_in_path: Check if '.'+brand+'.' pattern exists in path but NOT in the domain itself  
+                    // Python: if '.'+b+'.' in path and b not in domain
                     features.brand_in_path = 0;
+                    var pathWithDots = '.' + pathLower + '.';
                     for (var b = 0; b < brandKeywords.length; b++) {
                         var brand = brandKeywords[b];
-                        if (pathLower.indexOf(brand) !== -1 && domainLabel.toLowerCase() !== brand) {
+                        if (pathWithDots.indexOf('.' + brand + '.') !== -1 && domainLabel.toLowerCase() !== brand) {
                             features.brand_in_path = 1;
                             break;
                         }
                     }
 
-                    var suspiciousTlds = ['fit','tk','gp','ga','work','ml','date','wang','men','icu','online','click','xyz','top','zip','country','stream','download','xin','racing','jetzt','ren','mom','party','review','trade','accountants','science','ninja','faith','cricket','win','accountant','realtor','christmas','gdn','link','asia','club','la','ae','exposed','pe','rs','audio','website','bj','mx','media'];
+                    // Python의 suspecious_tlds 전체 목록 (56개)
+                    var suspiciousTlds = ['fit','tk','gp','ga','work','ml','date','wang','men','icu','online','click','xyz','top','zip','country','stream','download','xin','racing','jetzt','ren','mom','party','review','trade','accountants','science','ninja','faith','cricket','win','accountant','realtor','christmas','gdn','link','asia','club','la','ae','exposed','pe','rs','audio','website','bj','mx','media','go.id','k12.pa.us','or.kr','ce.ke','gob.pe','gov.az','sa.gov.au'];
                     features.suspecious_tld = suspiciousTlds.includes(tld) ? 1 : 0;
                     // Note: statistical_report will be calculated in Kotlin after DNS lookup
                     // (not included in JavaScript - handled natively on Android side)
@@ -449,10 +441,6 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     }
                     features.nb_extCSS = extCSSCount;
 
-                    features.ratio_intRedirection = 0;
-                    features.ratio_extRedirection = 0;
-                    features.ratio_intErrors = 0;
-                    features.ratio_extErrors = 0;
 
                     var forms = document.getElementsByTagName('form');
                     var hasLoginForm = false;
@@ -575,23 +563,22 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                     features.domain_in_title = (titleLower.indexOf(domainLabel) !== -1) ? 0 : 1;
                     console.log('DEBUG: domainLabel = "' + domainLabel + '", titleLower = "' + titleLower + '", domain_in_title = ' + features.domain_in_title);
 
-                    // domain_with_copyright: Check if domain appears near copyright symbol
-                    // Python: finds ©/™/® then checks if domain in surrounding 50 chars
+                    // domain_with_copyright: Check if domain appears near copyright symbol (©/™/®)
+                    // Python: re.search(u'(\N{COPYRIGHT SIGN}|\N{TRADE MARK SIGN}|\N{REGISTERED SIGN})', content)
+                    // Then checks if domain in content[m.span()[0]-50:m.span()[0]+50]
                     var bodyTextForCopy = (document.body && document.body.innerText) ? document.body.innerText : '';
-                    var copyrightMatch = bodyTextForCopy.match(/[\u00A9\u2122\u00AE]|copyright/i);
-                    if (copyrightMatch) {
-                        var matchIndex = bodyTextForCopy.toLowerCase().search(/[\u00A9\u2122\u00AE]|copyright/i);
-                        if (matchIndex !== -1) {
-                            var start = Math.max(0, matchIndex - 50);
-                            var end = Math.min(bodyTextForCopy.length, matchIndex + 50);
+                    features.domain_with_copyright = 0;
+                    var copyrightSymbolMatch = bodyTextForCopy.match(/[\u00A9\u2122\u00AE]/);
+                    if (copyrightSymbolMatch) {
+                        var symbolIndex = bodyTextForCopy.indexOf(copyrightSymbolMatch[0]);
+                        if (symbolIndex !== -1) {
+                            var start = Math.max(0, symbolIndex - 50);
+                            var end = Math.min(bodyTextForCopy.length, symbolIndex + 50);
                             var copyrightContext = bodyTextForCopy.substring(start, end).toLowerCase();
+                            // domain appears near copyright: return 0 (normal)
+                            // domain NOT appears near copyright: return 1 (suspicious)
                             features.domain_with_copyright = (copyrightContext.indexOf(domainLabel) !== -1) ? 0 : 1;
-                        } else {
-                            features.domain_with_copyright = 0;
                         }
-                    } else {
-                        // No copyright symbol found - Python returns 0 in except block
-                        features.domain_with_copyright = 0;
                     }
 
                     Android.receiveFeatures(JSON.stringify(features));
