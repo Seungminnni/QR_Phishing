@@ -117,16 +117,17 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
                         return 1
                     }
                 } catch (e: Exception) {
-                    // DNS 조회 실패: 로그만 기록하고 0 반환 (예외는 모델 학습과 무관)
+                    // ✅ Python과 동일: DNS 조회 실패 시 2 반환
+                    // 학습 데이터에서 값 2인 경우 92%가 피싱이므로 중요한 신호!
                     Log.d("WebFeatureExtractor", "statistical_report: DNS lookup failed for hostname '$hostname' - ${e.message}")
-                    return 0
+                    return 2
                 }
             }
 
             return 0  // 정상
         } catch (e: Exception) {
             Log.e("WebFeatureExtractor", "Error calculating statistical_report", e)
-            return 0  // 예외 시 0 반환
+            return 2  // 예외 시 2 반환 (Python과 동일)
         }
     }
 
