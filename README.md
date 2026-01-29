@@ -1,12 +1,12 @@
-# 🛡️ QR Phishing Detector - 샌드박스 WebView 기반 피싱 탐지 안드로이드 앱
+# QR Phishing Detector - 샌드박스 WebView 기반 피싱 탐지 안드로이드 앱
 
 QR 코드 스캔 후 **격리된 샌드박스 WebView 환경**에서 URL을 분석하여 피싱 여부를 탐지하는 **온-디바이스 머신러닝** 안드로이드 앱입니다.
 
-> 🔒 **핵심 기술**: 사용자가 실제 웹페이지에 접근하기 **전에** 분석용 WebView에서 먼저 페이지를 로드하고, JavaScript로 **64개** 피처를 추출한 뒤 TFLite 모델로 피싱 여부를 판정합니다.
+> **핵심 기술**: 사용자가 실제 웹페이지에 접근하기 **전에** 분석용 WebView에서 먼저 페이지를 로드하고, JavaScript로 **64개** 피처를 추출한 뒤 TFLite 모델로 피싱 여부를 판정하며 정적 기술을 통과한 로그인 제출 폼에 의해서 임의의 값 대입 후 발생하는 변화의 탐지로 동적 탐지를 수행합니다.
 
 ---
 
-## 📱 주요 기능
+## 주요 기능
 
 ### 1. **QR 코드 실시간 스캔**
 - CameraX + ML Kit Barcode Scanner로 실시간 QR 코드 인식
@@ -35,7 +35,7 @@ QR 코드 스캔 후 **격리된 샌드박스 WebView 환경**에서 URL을 분�
 
 ---
 
-## 🔐 샌드박스 WebView 아키텍처
+## 샌드박스 WebView 아키텍처
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -78,7 +78,7 @@ QR 코드 스캔 후 **격리된 샌드박스 WebView 환경**에서 URL을 분�
 
 ---
 
-## 🏗️ 프로젝트 구조
+## 프로젝트 구조
 
 ```
 QR_Phishing/
@@ -226,7 +226,7 @@ QR_Phishing/
 
 ---
 
-## 🔄 동작 흐름
+## 동작 흐름
 
 ### 1️⃣ 앱 초기화
 ```
@@ -282,9 +282,9 @@ URL 유효성 검증 (http/https)
 (UNCERTAIN 케이스에만 실행)
   ↓
 ┌─────────────────────────────────────────────┐
-│  🔒 동적 샌드박스 진입                       │
-│  • 사용자 WebView: 숨김                        │
-│  • sandboxInfoPanel: 표시                   │
+│  동적 샌드박스 진입                            │
+│  • 사용자 WebView: 숨김                       │
+│  • sandboxInfoPanel: 표시                    │
 └─────────────────────────────────────────────┘
 
 # 1) 초기 로드 및 즉시 동적 감시
@@ -605,82 +605,6 @@ cd <PROJECT_ROOT>
 
 ---
 
-## 🚀 실행 방법
-
-### Android Studio에서
-
-1. **프로젝트 열기**
-   ```
-   File → Open → <PROJECT_ROOT>
-   ```
-
-2. **빌드**
-   ```
-   Build → Clean Project
-   Build → Make Project
-   ```
-
-3. **실행**
-   ```
-   Run → Run 'app'
-   (에뮬레이터 또는 물리 디바이스 선택)
-   ```
-
-### 터미널에서
-
-```bash
-cd <PROJECT_ROOT>
-
-# 설치 & 실행
-./gradlew installDebug
-adb shell am start -n com.example.a1/.MainActivity
-```
-
----
-
-## 🔍 디버깅
-
-### Logcat 로그 확인
-
-```bash
-# 전체 로그
-adb logcat | grep -E "(PhishingDetector|TFLite|Scaler|WebFeatureExtractor)"
-
-# TFLite 초기화 확인
-adb logcat TFLitePhishingPredictor:D *:S
-
-# 피처 추출 확인
-adb logcat WebFeatureExtractor:D *:S
-
-# 전처리 과정 확인
-adb logcat ScalerPreprocessor:D *:S
-
-# 최종 판정 확인
-adb logcat PhishingDetector:D *:S
-```
-
-### 예상 정상 로그
-
-```
-TFLitePhishingPredictor: ✅ TFLite 모델 로드 성공
-TFLitePhishingPredictor: 📊 모델 구조:
-TFLitePhishingPredictor:   입력 Shape: [1, 64]
-TFLitePhishingPredictor:   출력 Shape: [1, 1]
-ScalerPreprocessor: ✅ ScalerPreprocessor 초기화 성공
-PhishingDetector: ✅ TFLite 모델 초기화 성공
-
-[사용자가 URL 분석 시작]
-
-MainActivity: SANDBOX_START - Analysis WebView만 로드 시작
-WebFeatureExtractor: RAW_FEATURES_JSON: {...}
-PhishingDetector: 🤖 TFLite 모델로 예측 시작
-ScalerPreprocessor: 피처 전처리 완료: 64개 값
-TFLitePhishingPredictor: ✅ TFLite 예측 성공: 0.87
-PhishingDetector: ✅ TFLite 예측 성공: 0.87
-```
-
----
-
 ## ⚠️ 주의사항
 
 ### 권한 요구
@@ -724,15 +648,9 @@ with(analysisWebView.settings) {
 }
 ```
 
-### 격리 확인 로깅
-```kotlin
-private fun logIsolationCheck(event: String, url: String?, message: String) {
-    Log.d("ISOLATION_CHECK", "[$event] $message - URL: $url")
-}
-```
-
 ---
 
-## 📄 라이선스
+## 📄 라이선스 및 특허 사항
 
-본 프로젝트는 저작자의 허가없이 재사용 및 상업적 이용을 금지합니다.
+본 프로젝트는 저작자의 허가 없이 재사용 및 상업적 이용을 금지합니다.(라이선스 선언 하지 않음)
+또한 우지안, 이승민, 박인석 3인과 영남대학교와의 특허 출원이 되어있습니다.
