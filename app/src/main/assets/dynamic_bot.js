@@ -24,7 +24,7 @@
       // ===== helpers =====
 
       //POST 메타 데이터
-      const CRED_KEY_RE = /(pass|pwd|password|pin|otp|code|token|secret|cvv|cvc|ssn|card|account|acct|iban|routing|email|e-mail|user|login|id|phone|mobile)/i;
+      const CRED_KEY_RE = /(pass|pwd|password|pin|otp|code|token|secret|cvv|cvc|ssn|card|account|acct|iban|routing|email|e-mail|user|login|id|phone|mobile|username)/i;
 
       function absUrl(u) {
         try { return new URL(u, location.href).href; } catch(e) { return String(u || ""); }
@@ -191,7 +191,7 @@
         const id = lower(input.id);
         const ph = lower(input.placeholder);
         if (type === "email" || type === "tel") return true;
-        if (/(email|e-mail|user|login|id|phone|mobile|account)/.test(name + " " + id + " " + ph)) return true;
+        if (/(email|e-mail|user|login|id|phone|mobile|account|username)/.test(name + " " + id + " " + ph)) return true;
         return false;
       }
 
@@ -417,7 +417,7 @@
                            submitEl = btns.find(b => {
                                const txt = (b.innerText || "").toLowerCase();
                                return /(login|log in|sign in|next|continue|enter|auth|submit|로그인|다음|계속|접속)/.test(txt) &&
-                                      !/(search|find|join|reg|검색|찾기)/.test(txt);
+                                      !/(search|find|join|reg|검색|찾기|)/.test(txt);
                            });
                        }
                   }

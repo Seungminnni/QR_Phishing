@@ -23,7 +23,7 @@ class TFLitePhishingPredictor(private val context: Context) {
     companion object {
         private const val TAG = "TFLitePhishingPredictor"
         private const val MODEL_FILE = "phishing_classifier.tflite"
-        private const val INPUT_SIZE = 71  // 71개 피처
+        private const val INPUT_SIZE = 64  // 64개 피처
     }
 
     init {

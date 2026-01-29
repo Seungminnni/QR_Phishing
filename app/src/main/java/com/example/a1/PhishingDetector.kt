@@ -14,7 +14,7 @@ class PhishingDetector(private val context: Context) {
 
     companion object {
         private const val TAG = "PhishingDetector"
-        private const val ML_THRESHOLD = 0.55f
+        private const val ML_THRESHOLD = 1.01f // 이거 정적 스레시홀드임
     }
 
     init {

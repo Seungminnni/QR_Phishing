@@ -934,7 +934,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val NO_URL_WARNING_KEY = "__NO_URL__"
         private const val DEFAULT_CAMERA_HINT = "QR을 비추면 위협 URL이 여기에 나타납니다"
-        private const val DEBUG_AUTO_LAUNCH_URL = "https://www.velocidrone.com/" // 여기 url 하드코딩
+        private const val DEBUG_AUTO_LAUNCH_URL = "https://watch.formed.org/login" // 여기 url 하드코딩
     }
 
     private fun maybeLaunchDebugUrl() {

@@ -16,7 +16,6 @@
     "nb_com",
     "ratio_digits_url",
     "ratio_digits_host",
-    "nb_redirection",
     "length_words_raw",
     "char_repeat",
     "shortest_words_raw",
@@ -29,9 +28,7 @@
     "avg_word_host",
     "avg_word_path",
     "phish_hints",
-    "nb_extCSS",
-    "ratio_extRedirection",
-    "ratio_extErrors"
+    "nb_extCSS"
   ],
   "robust_center": [
     47.0,
@@ -49,7 +46,6 @@
     0.0,
     0.0,
     0.0,
-    0.0,
     5.0,
     3.0,
     3.0,
@@ -61,8 +57,6 @@
     6.400000095367432,
     7.0,
     4.833333492279053,
-    0.0,
-    0.0,
     0.0,
     0.0
   ],
@@ -82,7 +76,6 @@
     1.0,
     0.0793650820851326,
     1.0,
-    1.0,
     6.0,
     3.0,
     1.0,
@@ -95,9 +88,7 @@
     4.0,
     6.75,
     1.0,
-    1.0,
-    0.23076923191547394,
-    0.03703703731298447
+    1.0
   ],
   "raw_cols": [
     "ip",
@@ -119,17 +110,13 @@
     "abnormal_subdomain",
     "nb_subdomains",
     "prefix_suffix",
-    "random_domain",
     "shortening_service",
     "path_extension",
-    "nb_external_redirection",
     "domain_in_brand",
     "brand_in_subdomain",
     "brand_in_path",
     "suspecious_tld",
     "statistical_report",
-    "ratio_intRedirection",
-    "ratio_intErrors",
     "login_form",
     "submit_email",
     "sfh",

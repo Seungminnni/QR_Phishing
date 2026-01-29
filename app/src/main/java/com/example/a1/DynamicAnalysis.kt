@@ -35,6 +35,9 @@ class DynamicAnalysis(
     private var lastCrpLogKey: String? = null
     private var autoSubmitArmed: Boolean = false
     private var onAnalysisResult: ((Boolean) -> Unit)? = null
+    private var crpDetected: Boolean = false
+    private var dummyFilled: Boolean = false
+    private var testStartTime: Long = 0L
     private fun nowMs(): Long = SystemClock.elapsedRealtime()
     private fun inBootstrap(): Boolean = nowMs() < bootstrapUntilMs
     private var isSubmitTriggered = false
@@ -135,6 +138,11 @@ class DynamicAnalysis(
                             // reportUi에서 걸어둔 '안전 판정 타이머' 취소 (중요!)
                             handler.removeCallbacksAndMessages(null)
 
+                            // ★ CSV 로그 기록 (피싱)
+                            val timeMs = System.currentTimeMillis() - testStartTime
+                            val csvLog = "$currentUrl,$crpDetected,$dummyFilled,PHISHING,$timeMs"
+                            Log.d("TEST_CSV", csvLog)
+
                             // 결과: 피싱(False) -> 차단 화면 띄우기
                             onAnalysisResult?.invoke(false)
                             onAnalysisResult = null
@@ -197,6 +205,11 @@ class DynamicAnalysis(
         this.onAnalysisResult = onResult
 
         clearAllowNavigation("new_session")
+        
+        // ★ 테스트 상태 초기화
+        crpDetected = false
+        dummyFilled = false
+        testStartTime = System.currentTimeMillis()
 
         // 세션 정리
         webView.stopLoading()
@@ -359,6 +372,7 @@ class DynamicAnalysis(
                 lastCrpLogKey = key
 
                 if (conf == "NONE") {
+                    crpDetected = false
                     Log.d(TAG, "🧩 [CRP NONE] url=$url")
                     onStatus?.invoke("🧩 CRP 없음\n$url")
                     autoSubmitArmed = false
@@ -378,6 +392,7 @@ class DynamicAnalysis(
                         }
                     }
                 } else {
+                    crpDetected = true
                     Log.w(TAG, "🧩 [CRP FOUND:$conf] score=$score type=${crpType ?: "-"} roles=${roles.joinToString("+")} method=${method ?: "-"} action=${action ?: "-"} submit=${submitText ?: "-"} url=$url")
                     onStatus?.invoke("🧩 CRP 발견: $conf (score=$score)\nroles=${roles.joinToString("+")}\n$url")
                 }
@@ -395,6 +410,9 @@ class DynamicAnalysis(
                 val o = JSONObject(json)
                 val t = o.optString("t", "")
                 if (t == "submit_attempt") {
+                    // ★ 더미값 대입 플래그 업데이트
+                    dummyFilled = true
+                    
                     Log.d(TAG, "⚡ [Bridge] 자동 제출 시도됨. 2초간 리다이렉트 감시 시작.")
 
                     // 1. 감시 플래그 켜기
@@ -413,14 +431,20 @@ class DynamicAnalysis(
 
                         handler.postDelayed({
                             // 여기까지 코드가 실행됐다면?
-                            // = 2초 동안 페이지 이동이 안 일어났다 (로그인 실패)
+                            // = 10초 동안 페이지 이동이 안 일어났다 (로그인 실패)
                             // = "안전(True)"
                             if (onAnalysisResult != null) {
-                                Log.d(TAG, "✅ 2초간 리다이렉트 없음(로그인 실패) -> 안전 판정")
+                                Log.d(TAG, "✅ 10초간 리다이렉트 없음(로그인 실패) -> 안전 판정")
+                                
+                                // ★ CSV 로그 기록 (안전)
+                                val timeMs = System.currentTimeMillis() - testStartTime
+                                val csvLog = "$currentUrl,$crpDetected,$dummyFilled,SAFE,$timeMs"
+                                Log.d("TEST_CSV", csvLog)
+                                
                                 onAnalysisResult?.invoke(true)
                                 onAnalysisResult = null
                             }
-                        }, 2000L) // 2초 대기
+                        }, 10000L) // 10초 대기 네트워크 상황에 따른 여유 시간을 충분히 줌, 아이디어 확인 해야하니
                     }
                 }
             } catch (e: Exception) {
