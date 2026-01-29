@@ -2,7 +2,7 @@
 
 QR 코드 스캔 후 **격리된 샌드박스 WebView 환경**에서 URL을 분석하여 피싱 여부를 탐지하는 **온-디바이스 머신러닝** 안드로이드 앱입니다.
 
-> 🔒 **핵심 기술**: 사용자가 실제 웹페이지에 접근하기 **전에** 분석용 WebView에서 먼저 페이지를 로드하고, JavaScript로 71개 피처를 추출한 뒤 TFLite 모델로 피싱 여부를 판정합니다.
+> 🔒 **핵심 기술**: 사용자가 실제 웹페이지에 접근하기 **전에** 분석용 WebView에서 먼저 페이지를 로드하고, JavaScript로 **64개** 피처를 추출한 뒤 TFLite 모델로 피싱 여부를 판정합니다.
 
 ---
 
@@ -24,7 +24,7 @@ QR 코드 스캔 후 **격리된 샌드박스 WebView 환경**에서 URL을 분�
 
 ### 3. **온-디바이스 ML 피싱 탐지**
 - **TFLite 모델**: 서버 통신 없이 기기 내에서 추론
-- **71개 웹 피처 추출**: JavaScript 인젝션으로 DOM 동적 분석
+- **64개 웹 피처 추출**: JavaScript 인젝션으로 DOM 동적 분석
 - **RobustScaler 전처리**: 이상치에 강건한 정규화 적용
 - **휴리스틱 보강**: ML 실패 시 규칙 기반 탐지
 
@@ -109,7 +109,7 @@ QR_Phishing/
 │       ├── assets/
 │       │   ├── phishing_classifier.tflite ← TFLite 모델
 │       │   ├── scaler_params.json         ← RobustScaler 파라미터
-│       │   └── feature_info.json          ← 71개 피처 순서 정의
+│       │   └── feature_info.json          ← 64개 피처 순서 정의
 │       │
 │       └── res/
 │           ├── layout/activity_main.xml
@@ -143,6 +143,86 @@ QR_Phishing/
 | **F1-Score** | 0.94 |
 | **결정 임계값** | 0.55 |
 
+## 📋 사용된 피처 (64개) 및 특성
+
+현재 모델은 **64개**의 피처를 사용합니다. 아래 표는 각 피처의 카테고리, 간단한 설명, 그리고 런타임에서의 주의점(동적 아이디어)을 요약합니다.
+
+| 피처 | 카테고리 | 설명 | 런타임 / 동적 아이디어 |
+|---|---|---|---|
+| statistical_report | 보안(네트워크) | DNS 조회 기반 의심 도메인/패턴 검사 (0/1/2) | DNS 실패(2)는 강한 피싱 신호 → 캐싱/백오프 처리 권장 |
+| length_url | URL | 전체 URL 길이 | 길이 변화 감지 시 재분석 고려 |
+| length_hostname | URL | 호스트 길이 | 서브도메인 공격 탐지에 유용 |
+| ip | URL | URL에 IP 사용 여부 | IP 사용시 위험도 상승, 즉시 체크 |
+| nb_dots | URL | 호스트의 점(.) 개수 | 서브도메인 과다 여부 판별 |
+| nb_hyphens | URL | 하이픈 수 | 브랜드 사칭 도메인 지표 |
+| nb_at | URL | @ 문자 개수 | 리다이렉트/가짜 URL 신호 |
+| nb_qm | URL | ? 개수 | 파라미터 남발 탐지 |
+| nb_and | URL | & 개수 | 파라미터 복잡도 지표 |
+| nb_or | URL | '|' 개수 | 비표준 구분자 탐지 |
+| nb_eq | URL | = 개수 | 파라미터 조작 지표 |
+| nb_underscore | URL | _ 개수 | 불규칙한 도메인/경로 표시 |
+| nb_tilde | URL | ~ 사용 여부(0/1) | 사용자 홈디렉토리 의심 표시 |
+| nb_percent | URL | % 인코딩 수 | 인코딩 남발 시 의심 |
+| nb_slash | URL | / 개수 | 리다이렉트/다단계 경로 지표 |
+| nb_star | URL | * 개수 | 비정상적 패턴 탐지 |
+| nb_colon | URL | : 개수 | 포트 또는 프로토콜 이상 여부 |
+| nb_comma | URL | , 개수 | URL 변조 지표 |
+| nb_semicolumn | URL | ; 개수 | 의심스러운 쿼리 패턴 |
+| nb_dollar | URL | $ 개수 | 파라미터 변조 표시 |
+| nb_space | URL | 공백/ %20 수 | 이상한 인코딩 탐지 |
+| nb_www | URL | 'www' 단어 포함 횟수 | 중복 도메인 사칭 여부 |
+| nb_com | URL | 'com' 단어 포함 횟수 | TLD 변조/경로 사칭 지표 |
+| nb_dslash | URL | // 중복 개수 지표 | 오용된 스킴 표시 |
+| http_in_path | URL | 경로 내 'http' 등장 횟수 | 리다이렉트/중첩 링크 의심 |
+| https_token | 보안 | https 존재 여부 (0=HTTPS,1=없음) | HTTPS 미사용 시 즉시 경고 후보 |
+| ratio_digits_url | URL | URL 내 숫자 비율 | 자동 생성 도메인 지표 |
+| ratio_digits_host | URL | 호스트 내 숫자 비율 | IP/역할 도메인 의심 |
+| punycode | URL | punycode 사용 여부 | IDN 공격 탐지 (xn--) |
+| port | URL | 포트 노출 여부 | 비표준 포트 시 의심 |
+| tld_in_path | URL | 경로에 TLD 포함 여부 | 경로에 도메인 혼재 시 의심 |
+| tld_in_subdomain | URL | 서브도메인에 TLD 포함 여부 | 도메인 혼용 탐지 |
+| abnormal_subdomain | URL | 비정상 서브도메인 패턴 | 자동화된 의심 도메인 지표 |
+| nb_subdomains | URL | 서브도메인 개수 범주 | 과다 서브도메인 의심 |
+| prefix_suffix | URL | '-' 패턴 접두/접미 사용 | 브랜드 혼동 유발 지표 |
+| shortening_service | URL | 단축 URL 여부 | 단축 서비스인 경우 보수적 처리 권장 |
+| path_extension | URL | 경로가 .txt 등 확장자 유무 | 파일 링크 의심 지표 |
+| length_words_raw | URL | URL 단어 수 | 복잡성 지표 |
+| char_repeat | URL | 문자 반복 패턴 | 자동 생성/스팸 도메인 신호 |
+| shortest_words_raw | URL | URL 단어에서 최단 길이 | 약한 토큰 존재 탐지 |
+| shortest_word_host | URL | 호스트 단어 최단 길이 | 의미없는 토큰 탐지 |
+| shortest_word_path | URL | 경로 단어 최단 길이 | 연속 토큰 탐지 |
+| longest_words_raw | URL | URL 단어에서 최장 길이 | 긴 랜덤 토큰 탐지 |
+| longest_word_host | URL | 호스트 단어 최장 길이 | 혼합 도메인 탐지 |
+| longest_word_path | URL | 경로 단어 최장 길이 | 긴 페이로드 토큰 탐지 |
+| avg_words_raw | URL | URL 단어 평균 길이 | 토큰 분포 특징 |
+| avg_word_host | URL | 호스트 단어 평균 길이 | 도메인 구조 지표 |
+| avg_word_path | URL | 경로 단어 평균 길이 | 경로 복잡도 지표 |
+| phish_hints | 콘텐츠 | 키워드 기반 피싱 힌트 개수 | 히트 가중치로 가중치 적용 가능 |
+| domain_in_brand | 브랜드 | 도메인이 브랜드 목록에 해당 여부 | 브랜드 명시적 사칭 탐지 |
+| brand_in_subdomain | 브랜드 | 서브도메인에 브랜드 포함 여부 | 브랜드 스쿼팅 탐지 |
+| brand_in_path | 브랜드 | 경로에 브랜드 포함 여부 | 브랜드 피싱 기법 탐지 |
+| suspecious_tld | 보안 | 의심 TLD 목록 포함 여부 | TLD 기반 보수적 분류 추천 |
+| nb_extCSS | 콘텐츠 | 외부 CSS 링크 수 | 외부 자원 의존도 지표 |
+| login_form | DOM | 로그인 폼(비밀번호+아이디) 여부 | 폼 존재 시 위험도 상승 |
+| submit_email | DOM | 폼이 이메일로 전송되는지 여부 | 의심스러운 데이터 exfiltration 지표 |
+| sfh | DOM | form action이 없음/외부인 경우 | 서버 핸들러 부재 의심 |
+| iframe | DOM | 숨겨진 iframe 존재 여부 | 클릭재킹/피싱 행위 지표 |
+| popup_window | DOM | prompt() 등 팝업 사용 여부 | 사용자 유도 공격 지표 |
+| onmouseover | DOM | window.status 조작 여부 | UI 사기 기법 탐지 |
+| right_clic | DOM | 우클릭 차단 스크립트 여부 | 사용자 제어 제한 감지 |
+| empty_title | 콘텐츠 | 빈 타이틀 여부 | 비정상 페이지 신호 |
+| domain_in_title | 콘텐츠 | 제목에 도메인 포함 여부(0=있음) | 공개적 브랜드 일치 확인 |
+| domain_with_copyright | 콘텐츠 | 도메인이 저작권 근처에 있는지 | 표준 페이지 여부 확인 |
+
+**동적 아이디어 (런타임 확장 제안)**
+
+- 실시간 리디렉션 추적: 샌드박스 로드 중 리디렉션 체인을 추적해 단계별 점수 합산
+- 리소스 로딩 타이밍: 외부 리소스(스크립트/CSS) 지연/동적 삽입 패턴으로 추가 피처 생성
+- DOM 변화 감지: 초기 로드와 2–3초 이후 DOM 차이로 악성 스크립트 동작 포착
+- 시각적 비교 (스크린샷): 폼/로고 유사도(이미지 매칭)로 브랜드 사칭 검증
+- 사용자 피드백 루프: 앱에서 신고된 URL을 서버로 수집해 온디바이스 모델 주기적 업데이트
+- 설명 가능성 추가: SHAP/대체 가중치로 위험 이유(리스크 팩터) 우선순위 표시
+
 ---
 
 ## 🔄 동작 흐름
@@ -157,7 +237,7 @@ PhishingDetector 초기화
   │
   └─ ScalerPreprocessor 초기화
      ├─ scaler_params.json 로드 (RobustScaler 파라미터)
-     └─ feature_info.json 로드 (71개 피처 순서)
+     └─ feature_info.json 로드 (64개 피처 순서)
   ↓
 이중 WebView 설정
   ├─ webView: 사용자용 (JavaScript ON, 캐시 ON)
@@ -211,10 +291,10 @@ PhishingDetector.analyzePhishing(features, url)
   ↓
 ScalerPreprocessor.preprocessFeatures()
   ├─ RobustScaler 적용: (x - median) / IQR
-  └─ 71개 피처 → 모델 입력 순서로 정렬
+  └─ 64개 피처 → 모델 입력 순서로 정렬
   ↓
 TFLitePhishingPredictor.predictWithTFLite()
-  ├─ 입력: FloatArray[71]
+  ├─ 입력: FloatArray[64]
   ├─ TFLite Interpreter 실행
   └─ 출력: 피싱 확률 (0.0 ~ 1.0)
   ↓
@@ -262,7 +342,7 @@ else (안전)
 
 ### ML/AI 스택
 - **모델**: TensorFlow Lite
-- **입력**: 71개 피처 (FloatArray)
+- **입력**: 64개 피처 (FloatArray)
 - **출력**: 피싱 확률 (0.0 ~ 1.0)
 - **전처리**: RobustScaler (중앙값 기반, 이상치 강건)
 
@@ -363,7 +443,7 @@ class TFLitePhishingPredictor(private val context: Context) {
     
     companion object {
         private const val MODEL_FILE = "phishing_classifier.tflite"
-        private const val INPUT_SIZE = 71  // 71개 피처
+        private const val INPUT_SIZE = 64  // 64개 피처
     }
 
     private fun loadModel() {
@@ -372,7 +452,7 @@ class TFLitePhishingPredictor(private val context: Context) {
     }
 
     fun predictWithTFLite(features: FloatArray): Float {
-        val input = arrayOf(features)           // [1, 71]
+        val input = arrayOf(features)           // [1, 64]
         val output = Array(1) { FloatArray(1) } // [1, 1]
         
         interpreter?.run(input, output)
@@ -394,7 +474,7 @@ class ScalerPreprocessor(private val context: Context) {
     private var rawCols: List<String>       // 스케일링 안 할 피처
 
     fun preprocessFeatures(features: WebFeatures): FloatArray {
-        val result = FloatArray(71)
+        val result = FloatArray(64)
         
         for ((index, featureName) in featureColumnOrder.withIndex()) {
             val value = features[featureName] ?: 0f
@@ -450,7 +530,7 @@ class WebFeatureExtractor(private val callback: (WebFeatures) -> Unit) {
 }
 ```
 
-**추출하는 주요 피처 (71개 중 일부)**:
+**추출하는 주요 피처 (64개 중 일부)**:
 
 | 카테고리 | 피처 | 설명 |
 |---------|------|------|
