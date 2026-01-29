@@ -103,7 +103,8 @@ QR_Phishing/
 │       │   ├── PhishingDetector.kt        ← TFLite 모델 조율 + 휴리스틱
 │       │   ├── TFLitePhishingPredictor.kt ← TFLite 모델 로드 및 추론
 │       │   ├── ScalerPreprocessor.kt      ← RobustScaler 전처리
-│       │   ├── WebFeatureExtractor.kt     ← JavaScript 피처 추출
+│       │   ├── WebFeatureExtractor.kt     ← JavaScript 피처 추출 (Web->App bridge)
+│       │   ├── DynamicAnalysis.kt         ← 동적 샌드박스 컨트롤러 (동적 관찰 / 리다이렉션 감지)
 │       │   └── Types.kt                   ← 공용 타입 정의
 │       │
 │       ├── assets/
@@ -239,9 +240,10 @@ PhishingDetector 초기화
      ├─ scaler_params.json 로드 (RobustScaler 파라미터)
      └─ feature_info.json 로드 (64개 피처 순서)
   ↓
-이중 WebView 설정
-  ├─ webView: 사용자용 (JavaScript ON, 캐시 ON)
-  └─ analysisWebView: 분석용 (JavaScript ON, 캐시 OFF, 숨김)
+이중 WebView 설정 (업데이트된 샌드박스 아키텍처)
+  ├─ webView: 사용자용 (Visible, JavaScript ON, 캐시 ON)  ← 사용자가 실제로 상호작용하는 WebView
+  ├─ analysisWebView: 정적+동적 분석용 (Hidden, JavaScript ON, 캐시 OFF)  ← 정적 피처 추출 + 동적 관찰(MutationObserver, JS injection)
+  └─ DynamicAnalysis 컨트롤러: 동적 샌드박스 실행 및 증거 수집(동적 감시/리다이렉션 감지/타임아웃 관리)  ← 구현: `DynamicAnalysis.kt`
 ```
 
 ### 2️⃣ QR 코드 스캔
@@ -338,7 +340,11 @@ analyzeAndDisplayPhishingResult()  # 최종 판정 처리
 - **언어**: Kotlin
 - **최소 SDK**: API 26 (Android 8.0)
 - **대상 SDK**: API 36 (Android 15)
-- **아키텍처**: 단일 Activity + 이중 WebView 샌드박스
+- **아키텍처**: 단일 Activity 기반, 이중 WebView(사용자 WebView + analysisWebView) + 동적 샌드박스 컨트롤러
+  - 사용자 WebView: 실제 사용자 인터랙션(Visible)
+  - analysisWebView: 정적/동적 분석용(숨김, JS injection, MutationObserver)
+  - DynamicAnalysis: 동적 샌드박스 실행/증거 수집/타임아웃/리다이렉션 정책 관리
+  - ML 파이프라인: `PhishingDetector`(rules + ensemble), `TFLitePhishingPredictor`, `ScalerPreprocessor`
 
 ### ML/AI 스택
 - **모델**: TensorFlow Lite
