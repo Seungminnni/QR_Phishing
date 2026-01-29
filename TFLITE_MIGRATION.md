@@ -53,7 +53,7 @@ class TFLitePhishingPredictor(context: Context) {
 ```
 
 **입출력:**
-- **입력**: 71개 float32 특성 (RobustScaler 전처리됨)
+- **입력**: 64개 float32 특성 (RobustScaler 전처리됨)
 - **출력**: 1개 float32 값 (피싱 확률 0.0~1.0)
 
 ---
@@ -196,7 +196,7 @@ adb logcat | grep "TFLitePhishingPredictor"
 │  TFLite()    │  │  tures()         │
 └──────────────┘  └──────────────────┘
       ↑
-      │ (입력: 71개 특성)
+      │ (입력: 64개 특성)
       │
    phishing_classifier.tflite
 ```

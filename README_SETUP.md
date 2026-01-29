@@ -71,7 +71,7 @@ PhishingDetector 초기화
 ```
 웹페이지 로드
   ↓
-JavaScript로 71개 피처 추출
+JavaScript로 64개 피처 추출
   ↓
 ScalerPreprocessor에서 정규화
   ├─ 31개 피처: RobustScaler 적용 (x - median) / IQR
@@ -99,7 +99,7 @@ ScalerPreprocessor: ✅ ScalerPreprocessor 초기화 성공
 ### 예측 진행 로그
 ```
 PhishingDetector: 🤖 Keras 모델로 예측 시작
-ScalerPreprocessor: 피처 전처리 완료: 71개 값
+ScalerPreprocessor: 피처 전처리 완료: 64개 값
 KerasPhishingPredictor: ✅ Keras 예측 성공: 0.87
 PhishingDetector: ✅ Keras 예측 성공: 0.87
 ```

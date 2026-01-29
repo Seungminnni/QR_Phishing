@@ -12,7 +12,7 @@ import java.nio.file.Files
  * TFLitePhishingPredictor loads and runs a TFLite model for phishing detection.
  * 
  * Model: phishing_classifier.tflite (온-디바이스 추론용 경량 모델)
- * Input: 71개의 float32 특성 (RobustScaler 전처리됨)
+ * Input: 64개의 float32 특성 (RobustScaler 전처리됨)
  * Output: 1개의 float32 값 (피싱 확률, 0.0~1.0)
  */
 class TFLitePhishingPredictor(private val context: Context) {
@@ -98,7 +98,7 @@ class TFLitePhishingPredictor(private val context: Context) {
      * - output >= 0.55 → 피싱 판정
      * - output < 0.55 → 정상 판정
      * 
-     * @param features RobustScaler로 전처리된 71개 특성 배열 [71]
+     * @param features RobustScaler로 전처리된 64개 특성 배열 [64]
      * @return 피싱 확률 (0.0~1.0), 실패 시 -1.0
      */
     fun predictWithTFLite(features: FloatArray): Float {

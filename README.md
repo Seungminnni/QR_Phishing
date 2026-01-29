@@ -13,9 +13,9 @@ QR 코드 스캔 후 **격리된 샌드박스 WebView 환경**에서 URL을 분�
 - 감지된 URL 자동 프리뷰 및 "가상분석" 버튼 제공
 
 ### 2. **샌드박스 WebView 격리 분석**
-- **이중 WebView 아키텍처**:
-  - `analysisWebView`: 사용자에게 보이지 않는 분석 전용 WebView (격리 환경)
-  - `webView`: 안전 판정 후에만 사용자에게 노출되는 사용자용 WebView
+- **샌드박스 WebView (2개 구조)**:
+  - `analysisWebView` (분석 전용, 숨김): 페이지 로드/피처 추출 전용의 완전 격리된 WebView
+  - `webView` (사용자용): 판정이 '안전'으로 내려질 때만 사용자에게 로드/표시되는 WebView
 - **보안 설정**:
   - 파일/콘텐츠 접근 차단 (`allowFileAccess = false`)
   - 지리위치 비활성화 (`setGeolocationEnabled(false)`)
@@ -258,76 +258,76 @@ URL 유효성 검증 (http/https)
   └─ [가상분석] 버튼 활성화
 ```
 
-### 3️⃣ 샌드박스 분석 (launchSandbox)
+### 3️⃣ 정적 피처 추출 및 ML 추론 (초기 검사)
 ```
 사용자가 "가상분석" 버튼 클릭
   ↓
+# (숨김) analysisWebView로 URL 로드 → 정적 피처 추출
+# - HTML/메타/링크/폼 action/도메인/TLD/IP/shortener 패턴 등 정적 피처 계산
+# - 간이 규칙 기반 검사(rules_score) 및 전처리(ScalerPreprocessor 적용)
+# - 전체 TFLite 모델로 정밀 예측 실행(비동기 권장)
+
+# 1) ML 판정(통과/차단/불확실)
+# - PASS: 명백히 안전 → 바로 결과 처리(허용)
+# - FAIL: 명백히 위험 → 바로 결과 처리(차단)
+# - UNCERTAIN: 추가 동적 분석 필요 → 동적 샌드박스로 이동
+
+# 주의: 여기서는 임계값 기반의 '중간 스코어' 여부로 동적 검사 여부를 판단하며, 최종 결론은 정적+동적 증거를 합산해서 내립니다.
+```
+
+### 4️⃣ 동적 샌드박스 (launchSandbox) — 동적 행위 관찰 (단계 1–5)
+```
+(UNCERTAIN 케이스에만 실행)
+  ↓
 ┌─────────────────────────────────────────────┐
-│  🔒 샌드박스 모드 진입                        │
-│                                             │
-│  • 사용자 WebView: 숨김 상태 유지            │
-│  • 카메라/컨트롤: 숨김                        │
+│  🔒 동적 샌드박스 진입                       │
+│  • 사용자 WebView: 숨김                        │
 │  • sandboxInfoPanel: 표시                   │
 └─────────────────────────────────────────────┘
-  ↓
+
+# 1) 초기 로드 및 즉시 동적 감시
 analysisWebView.loadUrl(url)  ← 사용자에게 보이지 않음
-  ↓
+# - 리디렉션 체인 추적(최대 N단계 또는 타임아웃)
+# - 초기 MutationObserver 등록(동적 삽입 감시)
+
+# 2) 페이지 완전 로드 & 동적 추출
 onPageFinished() 트리거
-  ↓
-JavaScript 피처 추출 스크립트 인젝션
-  ├─ URL 구조 분석 (length_url, nb_dots, ip, ...)
-  ├─ DOM 분석 (login_form, iframe, popup_window, ...)
-  ├─ 브랜드 탐지 (domain_in_brand, brand_in_path, ...)
-  └─ 보안 지표 (https_token, sfh, submit_email, ...)
-  ↓
-WebFeatureExtractor.receiveFeatures(JSON)
-  ↓
-analyzeAndDisplayPhishingResult()
+# - 동적 생성 폼/iframe/스크립트 수집
+# - 로그인 폼이 동적으로 주입되면 '주입 이벤트'로 기록 (입력값 수집 불가)
+
+# 3) 네트워크·외부 의존도 검사 (비동기)
+# - DNS/WHOIS, 외부 스크립트/리소스 도메인 검사
+# - 외부 POST/fetch/XHR 감지(민감 경로 전송 여부)
+
+# 4) 동적 증거 기반 패스/페일 결정
+# - 리다이렉션으로 credential 처리 루트로 보낼 경우 즉시 FAIL
+# - 외부 도메인으로 자동 submit/토큰 전송 시 FAIL
+# - 단순 동적 UI 삽입이나 외부 리소스 로드만 있을 경우 PASS 가능
+
+# 5) 추가(옵션): 비동기 증거 수집
+# - 스크린샷 비교(로고 유사도), 외부 블랙리스트 조회, 사용자 신고 히스토리 참조
+# - 모든 증거는 값(패스/페일/중립)으로 정규화하여 전송
 ```
 
-### 4️⃣ ML 추론 및 판정
+### 5️⃣ 결과 처리 (최종 합산 및 액션)
 ```
-PhishingDetector.analyzePhishing(features, url)
-  ↓
-ScalerPreprocessor.preprocessFeatures()
-  ├─ RobustScaler 적용: (x - median) / IQR
-  └─ 64개 피처 → 모델 입력 순서로 정렬
-  ↓
-TFLitePhishingPredictor.predictWithTFLite()
-  ├─ 입력: FloatArray[64]
-  ├─ TFLite Interpreter 실행
-  └─ 출력: 피싱 확률 (0.0 ~ 1.0)
-  ↓
-임계값 비교 (threshold: 0.55)
-  ↓
-PhishingAnalysisResult 반환
-```
+# 동적 샌드박스 종료 후
+WebFeatureExtractor.receiveFeatures(JSON)  # 정적 + 동적 피처 병합
+analyzeAndDisplayPhishingResult()  # 최종 판정 처리
 
-### 5️⃣ 결과 처리
-```
-if (isPhishing && confidence > 0.55)
-  ↓
-⚠️ 경고 다이얼로그 표시
-  ├─ "피싱 위험 감지!"
-  ├─ 신뢰도: 87%
-  ├─ 위험 요인:
-  │  • 로그인 폼 감지
-  │  • 의심스러운 TLD
-  │  • 단축 URL 서비스
-  └─ [확인] → returnToCameraView()
-  ↓
-샌드박스 정리:
-  • analysisWebView.loadUrl("about:blank")
-  • analysisWebView.clearCache(true)
-  • webView.loadUrl("about:blank")
-  ↓
-카메라 모드 복귀
+# 최종 합산 로직 예시
+# - static_vote ∈ {PASS,FAIL,UNCERTAIN}
+# - dynamic_vote ∈ {PASS,FAIL,UNKNOWN}
+# - 결론: FAIL if either side strongly FAILs; PASS if static PASS and no dynamic FAIL; else 인터스티셜/사용자 확인
 
-else (안전)
-  ↓
-사용자 WebView에 URL 로드
-  ↓
-정상 브라우징 허용
+# 최종 행동
+- FAIL: 즉시 차단 + 경고 인터스티셜
+- PASS: 사용자 WebView 로드(허용)
+- UNCLEAR: 사용자 확인(인터스티셜) 또는 서버 검토 요청(옵션)
+
+# 정리:
+- 샌드박스 정리: analysisWebView.loadUrl("about:blank") / clearCache(true)
+- 로그/익명 텔레메트리 기록(옵션)
 ```
 
 ---
@@ -399,32 +399,33 @@ private fun extractWebFeatures() {
 
 ---
 
-### `PhishingDetector.kt` (96 lines)
-**역할**: TFLite 모델 조율 + 휴리스틱 규칙
+### `PhishingDetector.kt`
+**역할**: 휴리스틱 규칙과 TFLite(64개 입력) 예측을 결합하여 최종 판정 제공
 
 ```kotlin
 class PhishingDetector(private val context: Context) {
     private val tflitePredictor: TFLitePhishingPredictor?
     private val scalerPreprocessor: ScalerPreprocessor?
-    
+
     companion object {
-        private const val ML_THRESHOLD = 0.55f
+        // 서비스 설정값 (앱 설정 또는 원격 구성으로 변경 가능)
+        private const val ML_THRESHOLD = 0.55f  // 기본 결정 임계값
     }
 
     fun analyzePhishing(features: WebFeatures, currentUrl: String?): PhishingAnalysisResult {
-        // 1. 휴리스틱 규칙 (설명 가능성)
-        if (features["shortening_service"] == 1.0f) 
-            riskReasons.add("단축 URL 서비스 감지")
-        if (features["login_form"] == 1.0f) 
-            riskReasons.add("로그인/외부 폼 감지")
-        
-        // 2. TFLite 모델 예측
-        val preprocessed = scalerPreprocessor.preprocessFeatures(features)
+        val riskReasons = mutableListOf<String>()
+
+        // 1) 설명가능한 규칙 (우선적 체크)
+        if (features["shortening_service"] == 1.0f) riskReasons.add("단축 URL 서비스 감지")
+        if (features["login_form"] == 1.0f) riskReasons.add("로그인/외부 폼 감지")
+
+        // 2) ML 예측 (Scaler 적용 후 64개 피처 입력)
+        val preprocessed = scalerPreprocessor.preprocessFeatures(features) // FloatArray[64]
         val mlScore = tflitePredictor.predictWithTFLite(preprocessed)
-        
-        // 3. 최종 판정
+
+        // 3) 최종 판정: 규칙 기반 신호 + ML 스코어 조합(현재는 ML 스코어 기준)
         return PhishingAnalysisResult(
-            isPhishing = mlScore >= ML_THRESHOLD,
+            isPhishing = (mlScore >= ML_THRESHOLD) || riskReasons.isNotEmpty(),
             confidenceScore = mlScore,
             riskFactors = riskReasons
         )
@@ -432,6 +433,7 @@ class PhishingDetector(private val context: Context) {
 }
 ```
 
+설명: 모델 입력은 **64개 피처**이며, 운영 환경에서는 ML 임계값을 원격으로 조정하거나 규칙 기반 신호와 결합해 민감도 조절이 가능합니다.
 ---
 
 ### `TFLitePhishingPredictor.kt` (131 lines)
@@ -570,7 +572,7 @@ data class PhishingAnalysisResult(
 ### 빌드 명령어
 
 ```bash
-cd /home/wza/QR_Phishing
+cd <PROJECT_ROOT>
 
 # 전체 빌드
 ./gradlew clean build
@@ -603,7 +605,7 @@ cd /home/wza/QR_Phishing
 
 1. **프로젝트 열기**
    ```
-   File → Open → /home/wza/QR_Phishing
+   File → Open → <PROJECT_ROOT>
    ```
 
 2. **빌드**
@@ -621,7 +623,7 @@ cd /home/wza/QR_Phishing
 ### 터미널에서
 
 ```bash
-cd /home/wza/QR_Phishing
+cd <PROJECT_ROOT>
 
 # 설치 & 실행
 ./gradlew installDebug
@@ -656,7 +658,7 @@ adb logcat PhishingDetector:D *:S
 ```
 TFLitePhishingPredictor: ✅ TFLite 모델 로드 성공
 TFLitePhishingPredictor: 📊 모델 구조:
-TFLitePhishingPredictor:   입력 Shape: [1, 71]
+TFLitePhishingPredictor:   입력 Shape: [1, 64]
 TFLitePhishingPredictor:   출력 Shape: [1, 1]
 ScalerPreprocessor: ✅ ScalerPreprocessor 초기화 성공
 PhishingDetector: ✅ TFLite 모델 초기화 성공
@@ -666,7 +668,7 @@ PhishingDetector: ✅ TFLite 모델 초기화 성공
 MainActivity: SANDBOX_START - Analysis WebView만 로드 시작
 WebFeatureExtractor: RAW_FEATURES_JSON: {...}
 PhishingDetector: 🤖 TFLite 모델로 예측 시작
-ScalerPreprocessor: 피처 전처리 완료: 71개 값
+ScalerPreprocessor: 피처 전처리 완료: 64개 값
 TFLitePhishingPredictor: ✅ TFLite 예측 성공: 0.87
 PhishingDetector: ✅ TFLite 예측 성공: 0.87
 ```

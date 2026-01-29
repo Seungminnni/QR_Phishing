@@ -73,7 +73,7 @@ MainActivity 초기화
 ### 2. 피싱 감지
 ```
 WebView 페이지 로드
-  → JavaScript로 피처 추출 (71개)
+  → JavaScript로 피처 추출 (64개)
   → PhishingDetector.analyzePhishing() 호출
     → ScalerPreprocessor로 정규화 (RobustScaler 31개 + Raw 40개)
     → KerasPhishingPredictor로 예측

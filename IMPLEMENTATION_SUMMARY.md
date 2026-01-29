@@ -27,7 +27,7 @@ Android 단에서 구현한 기계학습 기반 피싱 탐지 시스템이 완�
   - JSON에서 RobustScaler 파라미터 로드
   - 31개 특성에 RobustScaler 적용: `(x - median) / IQR`
   - 40개 특성은 원본 그대로 유지
-  - 71개 전체 피처를 모델 입력 순서로 정렬
+  - 64개 전체 피처를 모델 입력 순서로 정렬
 - **호출**: `scalerPreprocessor.preprocessFeatures(webFeatures)`
 
 #### 4. Keras 모델 로더 (신규)
@@ -64,7 +64,7 @@ WebFeatures (Map<String, Float>)
         ↓
 ScalerPreprocessor.preprocessFeatures()
         ↓
-FloatArray (71개 정규화된 값)
+FloatArray (64개 정규화된 값)
         ↓
 KerasPhishingPredictor.predictWithKeras()
         ↓

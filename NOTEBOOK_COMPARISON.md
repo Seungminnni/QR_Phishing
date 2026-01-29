@@ -10,8 +10,8 @@
 | **데이터 소스** | Dataset-1 & Dataset-2 (별도 폴더) | phishing_data_tflite_ready.csv | phishing_data_tflite_ready.csv |
 | **Dataset-1** | 20개 공통 피처 (맵핑됨) | ❌ 사용 안 함 | ❌ 사용 안 함 |
 | **Dataset-2** | 20개 공통 피처 (맵핑됨) | ❌ 사용 안 함 | ❌ 사용 안 함 |
-| **TFLite 데이터** | ❌ 사용 안 함 | ✅ 71개 피처 | ✅ 71개 피처 |
-| **피처 개수** | 20개 공통 | 71개 전체 | 71개 전체 |
+| **TFLite 데이터** | ❌ 사용 안 함 | ✅ 64개 피처 | ✅ 64개 피처 |
+| **피처 개수** | 20개 공통 | 64개 전체 | 64개 전체 |
 
 ---
 
@@ -51,7 +51,7 @@ Dataset-1 & Dataset-2 (각각 별개로 관리)
 - ✅ 클래스 균형 보장 (50:50)
 - ✅ 데이터 무결성 (손실/중복 없음)
 - ✅ 재현 가능 (seed 설정)
-- ✅ 전체 71개 피처 활용
+- ✅ 전체 64개 피처 활용
 - ✅ 유연성 높음
 
 ---
@@ -84,7 +84,7 @@ embedding_model.ipynb과 동일!
 | **모델** | XGBoost | Keras Autoencoder + Classifier | XGBoost |
 | **SHAP 분석** | ✅ Beeswarm, Bar 플롯 | ❌ | ✅ Beeswarm, Bar 플롯 |
 | **교차검증** | 9가지 시나리오 (데이터셋별 조합) | 없음 (자체 분할) | 없음 (자체 분할) |
-| **피처 중요도** | SHAP (20개 공통 피처) | Autoencoder (71개 전체 피처) | SHAP (71개 전체 피처) |
+| **피처 중요도** | SHAP (20개 공통 피처) | Autoencoder (64개 전체 피처) | SHAP (64개 전체 피처) |
 
 ---
 
@@ -107,7 +107,7 @@ embedding_model.ipynb과 동일!
 - ✅ 피처 기여도 편차 분석
 
 **단점:**
-- ❌ 71개 피처 중 20개만 사용
+- ❌ 64개 피처 중 20개만 사용
 - ❌ 51개 피처 정보 손실
 - ❌ TFLite 모델과 피처 개수 불일치
 
@@ -116,13 +116,13 @@ embedding_model.ipynb과 동일!
 ### embedding_model.ipynb
 ```
 단일 분할 (60:20:20 with 50:50 균형)
-→ Autoencoder로 71개 피처 임베딩
+→ Autoencoder로 64개 피처 임베딩
 → 임베딩 공간에서 유사도 기반 분류
 → t-SNE 시각화
 ```
 
 **장점:**
-- ✅ 71개 전체 피처 활용
+- ✅ 64개 전체 피처 활용
 - ✅ 깊은 임베딩 학습
 - ✅ 저차원 표현 생성
 - ✅ Keras 모델 (TFLite 호환 가능)
@@ -137,13 +137,13 @@ embedding_model.ipynb과 동일!
 ### xgboost_phishing_shap.ipynb
 ```
 embedding_model과 동일한 분할 (60:20:20 with 50:50 균형)
-→ XGBoost로 71개 피처 학습
+→ XGBoost로 64개 피처 학습
 → SHAP으로 피처 중요도 분석
 → Beeswarm, Bar 플롯 시각화
 ```
 
 **장점:**
-- ✅ 71개 전체 피처 활용
+- ✅ 64개 전체 피처 활용
 - ✅ SHAP으로 피처 해석성 제공
 - ✅ embedding_model과 동일한 데이터 분할
 - ✅ 빠른 학습 (Autoencoder 불필요)
@@ -161,7 +161,7 @@ embedding_model과 동일한 분할 (60:20:20 with 50:50 균형)
 ```
 ❌ 직접 호환 불가능
 ├─ 이유 1: 데이터 소스 다름 (Dataset-1/2 vs TFLite)
-├─ 이유 2: 피처 개수 다름 (20개 vs 71개)
+├─ 이유 2: 피처 개수 다름 (20개 vs 64개)
 └─ 이유 3: 분할 방식 다름 (사전분할 vs 동적분할)
 ```
 
@@ -171,7 +171,7 @@ embedding_model과 동일한 분할 (60:20:20 with 50:50 균형)
 ```
 ✅ 완벽 호환 가능!
 ├─ 이유 1: 동일한 데이터 소스 (phishing_data_tflite_ready.csv)
-├─ 이유 2: 동일한 피처 (71개)
+├─ 이유 2: 동일한 피처 (64개)
 ├─ 이유 3: 동일한 분할 방식 (60:20:20 with 50:50 균형)
 └─ 이유 4: 동일한 Train/Val/Test 데이터
 
@@ -212,8 +212,8 @@ xgboost_model_accuracy = 0.93    # 예시
 
 개선안:
 ├─ 옵션 1: embedding_model 분할 + XAI 시나리오
-│  └─ 71개 피처로 XAI_Phishing 9가지 시나리오 실행
-├─ 옵션 2: 20개 vs 71개 피처 비교
+│  └─ 64개 피처로 XAI_Phishing 9가지 시나리오 실행
+├─ 옵션 2: 20개 vs 64개 피처 비교
 │  └─ 피처 개수가 성능에 미치는 영향 분석
 └─ 옵션 3: Dataset-1/2를 embedding_model 방식으로 분할
    └─ XAI_Phishing 복잡성 간소화
@@ -226,11 +226,11 @@ xgboost_model_accuracy = 0.93    # 예시
 | 비교 항목 | XAI_Phishing | embedding_model | xgboost_phishing_shap |
 |---|---|---|---|
 | **데이터 분할** | 사전분할 (고정) | 동적분할 (50:50) | 동적분할 (50:50) |
-| **피처 개수** | 20개 | 71개 | 71개 |
+| **피처 개수** | 20개 | 64개 | 64개 |
 | **피처 호환성** | ❌ | ✅ | ✅ |
 | **데이터 호환성** | ❌ | ✅ | ✅ |
 | **직접 비교** | 불가능 | ✅ 가능 | ✅ 가능 |
-| **SHAP 분석** | ✅ (20개) | ❌ | ✅ (71개) |
+| **SHAP 분석** | ✅ (20개) | ❌ | ✅ (64개) |
 | **모델 다양성** | XGBoost만 | Autoencoder | XGBoost |
 | **해석성** | ✅ SHAP | ❌ | ✅ SHAP |
 
@@ -242,7 +242,7 @@ xgboost_model_accuracy = 0.93    # 예시
 ```
 ✅ 추천합니다! 이유:
 1. 동일한 데이터 분할 → 공정한 비교
-2. 동일한 71개 피처 → 피처 효과 분리 가능
+2. 동일한 64개 피처 → 피처 효과 분리 가능
 3. 동일한 Test 데이터 → 메트릭 직접 비교 가능
 4. 결론: "Autoencoder vs XGBoost, 어느 것이 더 나은가?"
 ```
@@ -250,7 +250,7 @@ xgboost_model_accuracy = 0.93    # 예시
 ### XAI_Phishing 개선
 ```
 ❌ 현재 방식은 20개 피처만 사용
-✅ 대신: embedding_model 분할 방식 + 20개vs71개 비교
+✅ 대신: embedding_model 분할 방식 + 20개 vs 64개 비교
    또는: XAI_Phishing을 embedding_model 분할로 재구성
 ```
 

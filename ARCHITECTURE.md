@@ -16,7 +16,7 @@
                              ▼
         ┌────────────────────────────────────────┐
         │   WebFeatureExtractor (JavaScript)     │
-        │   ↓ Extracts 71 web features          │
+        │   ↓ Extracts 64 web features          │
         │   Map<String, Float> (features)       │
         └────────────────────────────────────────┘
                              │
@@ -26,7 +26,7 @@
         │  ┌──────────────────────────────────────────────┐  │
         │  │ 1. Call kerasPredictor (primary)             │  │
         │  │    ├─ ScalerPreprocessor (31 RobustScaler)   │  │
-        │  │    │  └─ FloatArray (71 features)            │  │
+        │  │    │  └─ FloatArray (64 features)            │  │
         │  │    └─ KerasPhishingPredictor                 │  │
         │  │       └─ Python via Chaquopy                 │  │
         │  │          └─ TensorFlow Keras.predict()       │  │
@@ -106,7 +106,7 @@
               ├─ robustCenter: List<Float> (medians)
               ├─ robustScale: List<Float> (IQRs)
               ├─ rawCols: List<String> (40)
-              └─ featureColumnOrder: List<String> (71)
+              └─ featureColumnOrder: List<String> (64)
 
 
        KerasPhishingPredictor
@@ -121,7 +121,7 @@
       TFLitePhishingPredictor
               │
               ├─ interpreter: Interpreter
-              ├─ featureColumns: List<String> (71)
+              ├─ featureColumns: List<String> (64)
               └─ webFeaturesToFloatArray() → FloatArray
 ```
 
@@ -130,7 +130,7 @@
 ### Phase 1: 웹 기능 추출 (JavaScript)
 ```kotlin
 // WebFeatureExtractor.getFeatureExtractionScript()
-// JavaScript는 DOM을 분석하여 71개의 특성 추출
+// JavaScript는 DOM을 분석하여 64개의 특성 추출
 // → Android.receiveFeatures(featureMap) 호출
 // → WebFeatureExtractor 콜백으로 수신
 // → analyzeAndDisplayPhishingResult() 호출
@@ -156,7 +156,7 @@ DOM 특성:
 ### Phase 2: 전처리 (Kotlin)
 ```kotlin
 // ScalerPreprocessor.preprocessFeatures(features)
-// 1. 피처 이름을 모델 입력 순서로 정렬 (71개)
+// 1. 피처 이름을 모델 입력 순서로 정렬 (64개)
 // 2. RobustScaler 적용 (31개)
 //    - length_url: (47 - 47.0) / 37.0 = 0.0
 //    - nb_dots: (2 - 2.0) / 1.0 = 0.0
@@ -164,14 +164,14 @@ DOM 특성:
 // 3. Raw 유지 (40개)
 //    - login_form: 1.0 (그대로)
 //    - iframe: 0.0 (그대로)
-// 4. 반환: FloatArray(71)
+// 4. 반환: FloatArray(64)
 ```
 
 ### Phase 3: 예측 (Keras)
 ```kotlin
 // KerasPhishingPredictor.predictWithKeras(preprocessedFeatures)
 // 1. Python으로 Keras 모델 로드
-// 2. numpy 배열로 변환: reshape(1, 71)
+// 2. numpy 배열로 변환: reshape(1, 64)
 // 3. model.predict(input) 호출
 // 4. 시그모이드 출력: 0.87 (확률)
 // 5. Float 반환
@@ -240,7 +240,7 @@ DOM 특성:
 **용도**: 모든 피처의 정확한 순서 정의
 
 ### classifier_model.keras (796 KB)
-- Dense 신경망: 71 → 256 → 128 → 64 → 32 → 32 → 16 → 1
+- Dense 신경망: 64 → 256 → 128 → 64 → 32 → 32 → 16 → 1
 - 활성화: ReLU (은닉층), Sigmoid (출력층)
 - 손실: BinaryCrossentropy
 - 최적화: Adam (lr=0.001)

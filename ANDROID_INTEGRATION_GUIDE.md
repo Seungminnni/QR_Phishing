@@ -23,7 +23,7 @@
   - `scaler_params.json`에서 RobustScaler 파라미터 로드
   - 31개 특성에 RobustScaler 적용: `(x - median) / IQR`
   - 40개 특성은 원본 그대로 전달
-  - 총 71개 피처를 모델 입력 순서로 정렬
+  - 총 64개 피처를 모델 입력 순서로 정렬
 
 ### 4️⃣ Keras 모델 로더 (Chaquopy) ✅
 - **클래스**: `KerasPhishingPredictor.kt`
@@ -31,7 +31,7 @@
   - Chaquopy를 통해 Python 환경 초기화
   - assets에서 Keras 모델 자동 복사 (임시 저장소)
   - TensorFlow Keras로 모델 로드 및 캐싱
-  - 전처리된 71-차원 입력으로 예측 수행 (0-1 확률값)
+  - 전처리된 64-차원 입력으로 예측 수행 (0-1 확률값)
 
 ### 5️⃣ PhishingDetector 통합 ✅
 - **클래스**: `PhishingDetector.kt` (Keras만 사용)
@@ -49,7 +49,7 @@ val features: WebFeatures = mapOf(
     "length_url" to 47f,
     "nb_dots" to 2f,
     "login_form" to 1f,
-    // ... 71개 피처
+    // ... 64개 피처
 )
 ```
 
