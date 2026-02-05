@@ -1,0 +1,53 @@
+============================================================
+모델 평가 (Test Set)
+============================================================
+
+📊 성능 메트릭:
+  - Accuracy:  0.9108 (91.08%)
+  - Precision: 0.9041
+  - Recall:    0.9191
+  - F1 Score:  0.9115
+  - AUC-ROC:   0.9711
+
+📋 분류 리포트:
+              precision    recall  f1-score   support
+
+  Legitimate       0.92      0.90      0.91      1148
+    Phishing       0.90      0.92      0.91      1149
+
+    accuracy                           0.91      2297
+   macro avg       0.91      0.91      0.91      2297
+weighted avg       0.91      0.91      0.91      2297
+
+[Parallel(n_jobs=24)]: Using backend ThreadingBackend with 24 concurrent workers.
+[Parallel(n_jobs=24)]: Done   2 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=24)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=24)]: Using backend ThreadingBackend with 24 concurrent workers.
+[Parallel(n_jobs=24)]: Done   2 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=24)]: Done 100 out of 100 | elapsed:    0.0s finished
+
+============================================================
+🎯 최적 임계값 분석
+============================================================
+
+📊 임계값별 F1 Score (상위 10개):
+   Threshold 0.55: F1 = 0.9159 ⭐ BEST
+   Threshold 0.50: F1 = 0.9115 (기본값)
+   Threshold 0.45: F1 = 0.9055
+   Threshold 0.60: F1 = 0.9039
+   Threshold 0.40: F1 = 0.8971
+   Threshold 0.65: F1 = 0.8925
+   Threshold 0.35: F1 = 0.8869
+   Threshold 0.30: F1 = 0.8693
+   Threshold 0.70: F1 = 0.8543
+   Threshold 0.25: F1 = 0.8525
+
+✅ 최적 임계값: 0.55
+   - F1 Score: 0.9159
+   - Accuracy: 0.9173
+   - Precision: 0.9316
+   - Recall: 0.9008
+
+📌 기본 임계값 0.5 성능:
+   - F1 Score: 0.9115
+   - Accuracy: 0.9108
