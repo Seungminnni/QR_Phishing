@@ -1,0 +1,5 @@
+2def96b6d5ec75be19883b5226f5f430f7a611aee9a59b8f1fadc5871330f54f  app/src/main/assets/phishing_classifier.tflite
+eae320714815e9bdff03629877220876dd25594e4135ff2d4f89ad36cdd9a4bd  app/src/main/assets/scaler_params.json
+3e3393f4068e4d7e160ae2cbff036b43e5523b0dd3be8adbd59a88d3e9ec68a6  app/src/main/assets/feature_info.json
+98744095ab36063baf94cfd4150b88e4c1058a8e05784500e89a77700bbe01d8  app/src/main/assets/dynamic_bot.js
+596f12a1cc06e33b7ac371c79a7d864cd4273b46f7a90ee2529bec196ebce9e7  app/src/main/assets/dynapd_hgb_strict_state59_60_40.json

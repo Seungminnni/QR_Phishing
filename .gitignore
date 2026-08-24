@@ -1,0 +1,59 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.vscode/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*:Zone.Identifier
+
+# Local archives, papers, and screenshots
+*.zip
+*.pdf
+*.docx
+*.hwpx
+output*.png
+device_screen*.png
+
+# Local model and notebook artifacts
+*.h5
+*.keras
+*.joblib
+*.pt
+*.npz
+*.onnx
+*.onnx.data
+*.ipynb
+
+# Runtime logs and generated reports
+*.log
+*.err.log
+*_device_report.json
+*_device_summary.json
+*_instrumentation.log
+*_instrumentation.err.log
+evaluation_results/
+dynamic_dataset/
+
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Generated evaluation and training outputs
+app/src/main/assets/evaluation_urls.txt
+phishing/retrained_static_54/
+phishing/alexa-screenshots/
+phishing/*_results/
+phishing/*_dedup_results/
+phishing/*_dedup_strict_results/
+phishing/*_device_report*.json
+phishing/*_device_summary.json
+phishing/*_report*.json
+phishing/*_summary*.json
+phishing/*_logcat.txt
+phishing/*_comparison*.csv

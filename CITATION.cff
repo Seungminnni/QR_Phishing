@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use WHALE in academic work, please cite the Sensors 2026 article below."
+type: software
+title: "WHALE: WebView-Based Hybrid Analysis of Link and Event for On-Device QR Phishing Detection Framework"
+version: 1.0.0
+date-released: 2026-08-24
+repository-code: "https://github.com/Seungminnni/QR_Phishing"
+url: "https://doi.org/10.3390/s26144412"
+authors:
+  - family-names: Woo
+    given-names: Jian
+    affiliation: Yeungnam University
+  - family-names: Lee
+    given-names: Seungmin
+    affiliation: Yeungnam University
+  - family-names: Park
+    given-names: Inseok
+    affiliation: Yeungnam University
+  - family-names: Lee
+    given-names: Sejong
+    affiliation: Yeungnam University
+keywords:
+  - quishing
+  - phishing detection
+  - Android
+  - WebView
+  - on-device machine learning
+preferred-citation:
+  type: article
+  title: "WebView-Based Hybrid Analysis of Link and Event for On-Device QR Phishing Detection Framework"
+  authors:
+    - family-names: Woo
+      given-names: Jian
+    - family-names: Lee
+      given-names: Seungmin
+    - family-names: Park
+      given-names: Inseok
+    - family-names: Lee
+      given-names: Sejong
+  journal: Sensors
+  volume: "26"
+  issue: "14"
+  year: 2026
+  doi: "10.3390/s26144412"

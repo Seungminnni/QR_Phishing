@@ -1,0 +1,11 @@
+url	label	label_name	split	source_group
+https://accounts.ft.com/login?location=https%3A%2F%2Fwww.ft.com	0	benign	test	host:accounts.ft.com
+https://accounts.user.id/auth/realms/user-id/protocol/openid-connect/auth?response_type=code&client_id=cms-sso&scope=openid&state=DagEX_woEY7rvULxMVqe1Tp-ehEsrY5lLg8yvyLKIR4%3D&redirect_uri=https://www.merkur.de/sso/login/oauth2/code/user-id&nonce=AHbKMl24SPcWVO3XY0v2uvplW5r5wDHcjlQOXi4aZqw&code_challenge=Gix4SnmAQZoMiLrPhHqKR_VntVAGe-Z5bsh96oh8OEw&code_challenge_method=S256&articleUrl=https%3A%2F%2Fwww.merkur.de%2F&clientId=268&lang=de&source=client_login_web&transientId=dc729ed2-7d52-21ed-4eca-4ac8aba67138	0	benign	test	host:accounts.user.id
+https://auth.nextcloud.com/auth/realms/master/protocol/openid-connect/auth?response_type=code&scope=openid%20profile&client_id=new.nextcloud.com&state=ivJ0G5egiy2Uc1upXbOOCAzLJn8&redirect_uri=https%3A%2F%2Fnextcloud.com%2Fwp-admin%2Fredirect_uri&nonce=yNfCZ2saYb-eFB0mNP9ND816WkLS1vUbfUAqhjETTOI	0	benign	test	host:auth.nextcloud.com
+https://auth.wyze.com/login	0	benign	test	host:auth.wyze.com
+https://console.id5.io/login/auth	0	benign	test	host:console.id5.io
+https://creativecommons.org/wp-login.php	0	benign	test	host:creativecommons.org
+https://darkero.com/wp-login.php	0	benign	test	host:darkero.com
+https://disqus.com/profile/login/	0	benign	test	host:disqus.com
+https://financeiro.hostgator.com.br/	0	benign	test	host:financeiro.hostgator.com.br
+https://giphy.com/login	0	benign	test	host:giphy.com
